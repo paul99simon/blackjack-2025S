@@ -8,16 +8,19 @@ public class Message {
     
     private static int id_counter = 1;
     
-    public int message_length;
-    public int message_id;
-    public Id message_sender;
-    public int message_type;
+    public int    message_length;
+    public int    message_id;
+    public Id     sender_id;
+    public byte   sender_type;
+    public byte   message_type;
     public String payload;
     
-    public Message(int type, String payload)
+    public Message(Id sender_id, int sender_type, int message_type, String payload)
     {
-        this.message_type = type;
         this.message_length = payload.getBytes(GameProtocoll.CHARSET).length + 5 ;
+        this.sender_id = sender_id;
+        this.sender_type = (byte) sender_type;
+        this.message_type = (byte) message_type;
         this.message_id = id_counter++;
         this.payload = payload;
     }
