@@ -18,16 +18,16 @@
 </tr>
 <tr>
     <th>1-8</th>
-    <td colspan='4' style="text-align:center;">message_length</td>
-    <td colspan='4' style="text-align:center;">message_id</td>
+    <td colspan='4' style="text-align:center;">length</td>
+    <td colspan='4' style="text-align:center;">id</td>
 </tr>
     <th>9-16</th>
     <td colspan='8' style="text-align:center;">sender_id</td>
 </tr>
 <tr>
     <th>17-24</th>
-    <td style="text-align:center;">sender_type </td>
-    <td style="text-align:center;">message_type</td>
+    <td style="text-align:center;">st </td>
+    <td style="text-align:center;">mt</td>
     <td style="text-align:center;">0</td>
     <td style="text-align:center;">0</td>
     <td style="text-align:center;">0</td>

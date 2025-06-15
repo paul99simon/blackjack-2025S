@@ -8,6 +8,7 @@ public class GameProtocoll {
     
     private GameProtocoll(){}
 
+    public static final int HEADER_LENGTH = 4 + 4 + 4  
     public static final Charset CHARSET = StandardCharsets.UTF_8;
     public static final ByteOrder BYTE_ORDER = ByteOrder.BIG_ENDIAN;
     public static final String SEPERATOR = ":";

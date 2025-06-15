@@ -19,11 +19,13 @@ public class Dealer implements Runnable
     
     public DatagramSocket socket;
     public Pair<InetAddress, Integer> counter;
-    public Map<String, Pair<InetAddress, Integer>> players;
+    public Map<Id, Pair<InetAddress, Integer>> players;
 
     private int deckCount;
-    private Stack<Card> stack;
-
+    private int cut;
+    private Stack<Card> draw_stack;
+    private Stack<Card> disc_stack;
+    private Game game;
 
     public Dealer()
     {
@@ -51,7 +53,6 @@ public class Dealer implements Runnable
             System.out.println(e.getMessage());
         }
 
-        players = new ConcurrentLinkedQueue<>();
         stack = new Stack<Card>();
         prepareStack();
     }
