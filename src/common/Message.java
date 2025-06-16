@@ -17,20 +17,17 @@ public class Message {
     
     public Message(Id sender_id, int sender_type, int message_type, String payload)
     {
-        this.message_length = payload.getBytes(GameProtocoll.CHARSET).length + 5 ;
+        this(sender_id, sender_type, id_counter++,  message_type, payload);
+    }
+
+    public Message(Id sender_id, int sender_type, int message_id, int message_type, String payload)
+    {
+        this.message_length = payload.getBytes(GameProtocoll.CHARSET).length + GameProtocoll.HEADER_LENGTH ;
         this.sender_id = sender_id;
         this.sender_type = (byte) sender_type;
         this.message_type = (byte) message_type;
         this.message_id = id_counter++;
         this.payload = payload;
-    }
-
-    public Message(int id)
-    {
-        this.message_type = GameProtocoll.ACKNOWLEDGE;
-        this.message_length = 5;
-        this.message_id = id;
-        this.payload = "";
     }
 
     public Message (DatagramPacket packet)
@@ -40,32 +37,25 @@ public class Message {
         byte[] length = Arrays.copyOfRange(data, 0, 4);
         this.message_length = ByteBuffer.wrap(length).order(GameProtocoll.BYTE_ORDER).getInt();
 
-        byte[] id = Arrays.copyOfRange(data, 4, 8);
-        this.message_id = ByteBuffer.wrap(id).order(GameProtocoll.BYTE_ORDER).getInt();
-        this.message_type = data[8];
-        this.payload = new String(Arrays.copyOfRange(data, 9, this.message_length +1));
+        byte[] message_id = Arrays.copyOfRange(data, 4, 8);
+        this.message_id = ByteBuffer.wrap(message_id).order(GameProtocoll.BYTE_ORDER).getInt();
+
+        this.sender_id = new Id(Arrays.copyOfRange(data, 8 , 16));
+
+        this.message_type = data[16];
+        this.sender_type = data[17];
+
+        this.payload = new String(Arrays.copyOfRange(data, GameProtocoll.HEADER_LENGTH, this.message_length));
     }
 
-    public Message(int type, String[] payload)
+    public Message acknowledgeMessage(Id sender_id, int sender_type)
     {
-        StringBuilder builder = new StringBuilder();
-
-        for(int i = 0; i < payload.length; i++)
-        {
-            builder.append(payload[i]).append(GameProtocoll.SEPERATOR);
-        }
-
-        builder.deleteCharAt(builder.length()-1);
-        this.message_type = type;
-        this.payload = builder.toString();
-        this.message_id = id_counter++;
-        this.message_length = this.payload.getBytes(GameProtocoll.CHARSET).length + 5;
-
+        return new Message(sender_id, sender_type, this.message_id, GameProtocoll.ACKNOWLEDGE, "");
     }
 
     public byte[] getBytes()
     {
-        byte[] arr = new byte[message_length + 9];
+        byte[] arr = new byte[GameProtocoll.HEADER_LENGTH + message_length];
         
         ByteBuffer buffer = ByteBuffer.allocate(4).order(GameProtocoll.BYTE_ORDER).putInt(message_length);
         arr[0] = buffer.get(0);
@@ -79,13 +69,23 @@ public class Message {
         arr[6] = buffer.get(2);
         arr[7] = buffer.get(3);
 
-        arr[8] = (byte) message_type;
+        arr[8]  = this.sender_id.id[0];
+        arr[9]  = this.sender_id.id[1];
+        arr[10] = this.sender_id.id[2];
+        arr[11] = this.sender_id.id[3];
+        arr[12] = this.sender_id.id[4];
+        arr[13] = this.sender_id.id[5];
+        arr[14] = this.sender_id.id[6];
+        arr[15] = this.sender_id.id[7];
+        
+        arr[16] = (byte) message_type;
+        arr[17] = (byte) sender_type;
 
-        byte[] messageBytes = payload.getBytes(GameProtocoll.CHARSET);
-        int j = 9;
-        for(int i = 0; i < messageBytes.length; i++)
+        byte[] payloadBytes = payload.getBytes(GameProtocoll.CHARSET);
+        
+        for(int i = 0; i < payloadBytes.length; i++)
         {
-            arr[j++] = messageBytes[i];
+            arr[GameProtocoll.HEADER_LENGTH + i] = payloadBytes[i];
         }
         return arr;
     }
@@ -96,7 +96,9 @@ public class Message {
         StringBuilder builder = new StringBuilder();
         builder.append(message_length).append(GameProtocoll.SEPERATOR);
         builder.append(message_id).append(GameProtocoll.SEPERATOR);
+        builder.append(sender_id).append(GameProtocoll.SEPERATOR);
         builder.append(message_type).append(GameProtocoll.SEPERATOR);
+        builder.append(sender_type).append(GameProtocoll.SEPERATOR);
         builder.append(payload);
         return builder.toString();
     }

@@ -41,3 +41,11 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.17.0")
     implementation("org.javatuples:javatuples:1.2")
 }
+
+application {
+    mainClass.set("Main")
+}
+
+tasks.named<JavaExec>("run") {
+    standardInput = System.`in`  // Pipe System.in to the app
+}

@@ -26,7 +26,7 @@ public class Id {
 
     public Id(byte[] id)
     {
-        if(id.length != 8) throw IllegalArgumentException("id must have length 8");
+        if(id.length != 8) throw new IllegalArgumentException("id must have length 8");
         this.id = id;
     }
 
