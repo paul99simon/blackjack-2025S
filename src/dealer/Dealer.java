@@ -1,9 +1,18 @@
 package dealer;
 
 import common.Card;
+import common.Config;
+import common.Hand;
 import common.Id;
+import common.MaxRetriesExceededException;
+import common.Message;
+import common.Protocoll;
 import common.UDP_Endpoint;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,17 +41,187 @@ public class Dealer extends UDP_Endpoint
 
     public Dealer(int deckCount) throws IllegalArgumentException
     {   
-        super();
+        super(Protocoll.Header.Role.DEALER);
         this.counter = null;
         this.players = Collections.synchronizedMap(new HashMap<>());
 
         setDeckCount(deckCount);;
         this.draw_stack = new Stack<>();
         this.disc_stack = new Stack<>();
-        this.listenThread = new ListenThread(this);
-        this.inputThread = new InputThread(this);
         game = new Game(this);
     } 
+
+    @Override
+    public void listen()
+    {
+        byte[] buffer = new byte[Config.BUFFER_LENGTH];
+
+        while(true)
+        {
+            try
+            {
+                DatagramPacket packet = new DatagramPacket(buffer, Config.BUFFER_LENGTH);
+                socket.receive(packet);
+                Message message = new Message(packet);
+                System.out.println("received:" + message);
+                InetAddress addr = packet.getAddress();
+                int port = packet.getPort();
+                acknowledge(addr, port, message);
+
+                switch (message.message_type) {
+                    case Protocoll.Header.Type.ACK:
+                        synchronized(acknowledge)
+                        {
+                            acknowledge.put(message.message_id, message);
+                        }
+                        break;
+                    case Protocoll.Header.Type.SYN:
+                        if(message.sender_type == Protocoll.Header.Role.DEALER) break;
+
+                        switch (message.sender_type)
+                        {
+                            case Protocoll.Header.Role.COUNTER:
+                                counter = new Pair<InetAddress,Integer>(addr, port);
+                                break;
+                            case Protocoll.Header.Role.PLAYER:
+                                players.put(message.sender_id, new Pair<InetAddress, Integer>(addr, port));
+                                break;
+                            default:
+                                break;
+                        }
+
+                        Message synMessage = Message.synMessage(id, Protocoll.Header.Role.DEALER);
+                        Thread synThread = new Thread(() ->
+                        {
+                            try
+                            {
+                                send(addr, port, synMessage);
+                            }
+                            catch (IOException e)
+                            {
+                                System.out.println(e.getMessage());
+                            }
+                        });
+                        synThread.start();
+                        break;
+                    case Protocoll.Header.Type.FIN:
+                        if(message.message_type == Protocoll.Header.Role.DEALER) break;
+                        break;
+                    case Protocoll.Header.Type.AMOUNT:
+                        if(message.sender_type != Protocoll.Header.Role.PLAYER) break;
+                        if(game.currentPhase != Game.BETTING_PHASE) break;
+
+                        game.placeBet(message.sender_id, message.amount);
+                        if(game.allBetsPlaced())
+                        {
+                            Thread drawThread = new Thread(() -> game.startDrawPhase());
+                            drawThread.start();
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            catch(IOException e)
+            {
+                System.out.println(e.getMessage());
+            }    
+        }
+    }
+
+    @Override
+    public void processInput()
+    {
+        try
+        {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+
+            while(true)
+            {
+                String input = reader.readLine();
+                if(input.equals("start"))
+                {
+                    game.startBettinPhase();
+                }
+                else
+                {
+                    printHelp();
+                }
+            }
+        }
+        catch (IOException e)
+        {
+            System.out.printf("Exception: %s\n",e.getMessage());
+        }
+    }
+
+    @Override
+    protected void printHelp()
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.append("usage:\n");
+        builder.append("    start");
+        System.out.println(builder.toString());
+    }
+    
+    public void sendBettingRequest()
+    {
+        for(Hand hand : game.hands)
+        {
+            InetAddress addr = players.get(hand.owner).getValue0();
+            int port = players.get(hand.owner).getValue1();
+            Message bettingRequest = Message.amountMessage(id, Protocoll.Header.Role.DEALER, 0);
+            try
+            {
+                send(addr, port,  bettingRequest);
+            }
+            catch(IOException e)
+            {
+                System.out.println(e.getMessage());
+            }
+            catch(MaxRetriesExceededException e)
+            {
+                players.remove(hand.owner);
+                game.hands.remove(hand);
+            }
+        }
+    }
+
+    public void sendInitialCards()
+    {
+        for(Hand hand : game.hands)
+        {
+            Card card1 = top();
+            Card card2 = top();
+            Message message1 = Message.cardMessage(id, Protocoll.Header.Role.DEALER, true, card1);
+            Message message2 = Message.cardMessage(id, Protocoll.Header.Role.DEALER, true, card2);
+            
+            InetAddress addr = players.get(hand.owner).getValue0();
+            int port = players.get(hand.owner).getValue1();
+            try
+            {
+                send(addr, port, message1);
+                send(addr, port, message2);
+                hand.cards.add(card1);
+                hand.cards.add(card2);
+            }
+            catch(IOException e)
+            {
+                System.out.println(e.getMessage());
+            }
+            catch(MaxRetriesExceededException e)
+            {
+                draw_stack.push(card1);
+                draw_stack.push(card2);
+                game.hands.remove(hand);
+                players.remove(hand.owner);
+            }
+        }
+    }
+
+    //------------------------------------------------------------------------------------------------------------------------------------
+    // Card related stuff
+    //------------------------------------------------------------------------------------------------------------------------------------
 
     public Card top()
     {
@@ -109,7 +288,7 @@ public class Dealer extends UDP_Endpoint
 
         for(int i = 0; i < arr.length; i++)
         {
-            draw_stack.add(new Card(arr[i]));
+            draw_stack.add(new Card((byte) arr[i]));
         }
     }
 }

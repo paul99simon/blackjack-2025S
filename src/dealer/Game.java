@@ -1,78 +1,101 @@
 package dealer;
 
-import java.io.IOException;
 import java.net.InetAddress;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
-import org.javatuples.Pair;
-import org.javatuples.Triplet;
-
-import common.Card;
-import common.GameProtocoll;
+import common.Hand;
 import common.Id;
 import common.Message;
+import common.Protocoll;
 
 public class Game
 {
 
+    public static final int WAITING_PHASE = 0;
     public static final int BETTING_PHASE = 1;
     public static final int DRAW_PHASE = 2;
-    public static final int PLAY_PHASE = 3;
+    public static final int PLAYER_PHASE = 3;
+    public static final int DEALER_PHASE = 4; 
+
 
     private Dealer dealer;
 
     public int currentPhase;
 
-    public boolean inProgress;
     public int deckCount;
 
-    public Queue<Triplet<Id, List<Card>, Integer>> hands;
-    public Triplet<Id, List<Card>, Integer> currentPlayer;    
-
+    public Deque<Hand> hands;
+    public Hand currentPlayer;    
+   
     public Game(Dealer dealer)
     {
-        this.inProgress = false;
-        this.hands = new ConcurrentLinkedQueue<>();
+        this.dealer = dealer;
+        this.currentPhase = WAITING_PHASE;
+        this.hands = new ConcurrentLinkedDeque<>();
     }
 
-    public void reStart()
+    public boolean inProgress()
     {
-        this.inProgress = true;
-
-        this.currentPhase = Game.BETTING_PHASE;
-        for(Id id : this.dealer.players.keySet())
-        {
-            hands.add( new Triplet<Id, List<Card>, Integer>(id, new LinkedList<Card>(), 0) );
-        }
-        sendBettingRequest();
-        currentPlayer = hands.poll();
+        return currentPhase != WAITING_PHASE;
     }
 
-    private void sendBettingRequest()
+    public void startBettinPhase()
     {
-        for(Entry<Id, Pair<InetAddress, Integer>> player : dealer.players.entrySet())
+        if(currentPhase != WAITING_PHASE) throw new GameException("WAITING_PHASE must preceed BETTING_PHASE");
+        this.currentPhase = BETTING_PHASE;
+        for(Id id : dealer.players.keySet())
         {
-            Message bettingRequest = new Message(dealer.id, GameProtocoll.DEALER, GameProtocoll.BET, "" );
-            InetAddress addr = player.getValue().getValue0();
-            int port = player.getValue().getValue1();
-            try
+            hands.add( new Hand(id));
+        }
+        dealer.sendBettingRequest();
+    }
+
+    public void startDrawPhase()
+    {
+        if(currentPhase != BETTING_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
+        currentPhase = DRAW_PHASE;
+        dealer.sendInitialCards(); 
+        startPlayerPhase();
+    }
+
+    public void startPlayerPhase()
+    {
+        if(currentPhase != DRAW_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
+        currentPhase = PLAYER_PHASE;
+        while(!hands.isEmpty())
+        {
+            currentPlayer = hands.removeFirst();
+            Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER);
+            InetAddress addr = dealer.players.get(currentPlayer.owner).getValue0();
+            int port = dealer.players.get(currentPlayer.owner).getValue1();
+            dealer.send(addr, port, actionRequest);
+        }
+        startDealerPhase();
+    }
+
+    public void startDealerPhase()
+    {
+
+    }
+
+    public void placeBet(Id owner, int amount)
+    {
+        for(Hand hand : hands)
+        {
+            if(hand.owner.equals(owner))
             {
-                this.dealer.send(addr, port,  bettingRequest);
-                if(!dealer.acknowledge.get(bettingRequest.message_id))
-                {
-                    dealer.players.remove(player.getKey());
-                }
-                dealer.acknowledge.remove(bettingRequest.message_id);
-            }
-            catch(IOException e)
-            {
-                System.out.println(e.getMessage());
+                hand.wager = amount;
             }
         }
     }
+
+    public boolean allBetsPlaced()
+    {
+        long missingBets = hands.stream().filter(h -> h.wager == 0).count();
+        return missingBets == 0;
+    }
+
+   
 
 }

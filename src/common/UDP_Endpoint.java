@@ -13,24 +13,36 @@ import java.util.Map;
 public abstract class UDP_Endpoint implements Runnable
 { 
     public final Id id;
+    public final byte role;
+
+    public InetAddress addr;
+    public int port;
 
     public DatagramSocket socket;
     public Thread listenThread;  
     public Thread inputThread;
     
-    public Map<Integer, Boolean> acknowledge;
+    public Map<Integer, Message> acknowledge;
    
-    public UDP_Endpoint()
+    public UDP_Endpoint(byte role)
     {
-        id = new Id();
+        this.role = role;
         acknowledge = Collections.synchronizedMap(new HashMap<>());
+        initIpAndPort();
+        this.id = new Id(this.port);
 
+        listenThread = new Thread(() -> this.listen());
+        inputThread = new Thread(() -> this.processInput());
+    }
+
+    private void initIpAndPort()
+    {
         try
         {
             socket = new DatagramSocket();
             socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
-            InetAddress addr = socket.getLocalAddress();
-            int port = socket.getLocalPort();
+            addr = socket.getLocalAddress();
+            port = socket.getLocalPort();
             socket.disconnect();
             System.out.printf("udp endpoint is (%s %d)\n", addr.getHostAddress(), port);
         }
@@ -44,30 +56,62 @@ public abstract class UDP_Endpoint implements Runnable
         }
     }
 
+    public abstract void listen();
+    public abstract void processInput();
+    protected abstract void printHelp();
+
     public void run()
     {
         listenThread.start();
         inputThread.start();
     }
 
-    public void send(InetAddress addr, int port, Message message) throws IOException, MaxRetriesExceededExeption
+    public void acknowledge(InetAddress addr, int port, Message message)
+    {
+        if(message.message_type != Protocoll.Header.Type.ACK)
+        {
+            Message ackMessage = Message.ackMessage(id, role, message);
+            DatagramPacket ackPacket = new DatagramPacket(ackMessage.getBytes(), ackMessage.message_length, addr, port);
+            try
+            {
+                socket.send(ackPacket);
+            }
+            catch (IOException e)
+            {
+                System.out.println(e.getMessage());
+            }
+            System.out.println("acknowledge:"+ackMessage);
+        }
+    }
+
+    public void send(InetAddress addr, int port, Message message) throws IOException, MaxRetriesExceededException
     {
         int message_id = message.message_id;
-        synchronized(acknowledge)
-        {
-            acknowledge.put(message_id, false);
-        }
         byte[] data = message.getBytes();
         DatagramPacket packet = new DatagramPacket(data, data.length, addr, port);
         
-        synchronized(acknowledge)
+        int tries = 0;
+        while(tries < Config.MAX_TRIES)
         {
-            int tries = 0;
-            while(!acknowledge.get(message_id))
+            synchronized(acknowledge)
             {
-                if(tries > Config.MAX_TRIES) break;
-                socket.send(packet);
-                tries++;
+                if(acknowledge.get(message_id) != null)
+                {   
+                    acknowledge.remove(message_id);
+                    break;
+                }
+            }
+            if(tries > Config.MAX_TRIES) throw new MaxRetriesExceededException("maximum tries exceeded");
+            socket.send(packet);
+            System.out.println("sending:" + message);
+            tries++;
+            try
+            {
+                Thread.sleep((long) Math.pow(2,tries) * Config.TIMEOUT_MS);
+            }
+            catch (InterruptedException e)
+            {
+                System.out.println(e.getMessage());
             }
         }
     }

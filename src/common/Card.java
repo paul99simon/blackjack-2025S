@@ -2,9 +2,9 @@ package common;
 
 public class Card {
 
-    public final int value;
+    public final byte value;
 
-    public Card(int value) throws IllegalArgumentException
+    public Card(byte value) throws IllegalArgumentException
     {
         if(1 > value || 52 < value) throw new IllegalArgumentException("value must be between 1 and 52");
         this.value = value;
@@ -18,6 +18,13 @@ public class Card {
     public int getRank()
     {
         return value % 4 == 0 ? (value / 4) : (value / 4) + 1;
+    }
+
+    public int getValue()
+    {
+        int rank = getRank();
+        if(rank == 11 || rank == 12 || rank == 13) return 10;
+        return rank;
     }
 
     @Override
@@ -74,13 +81,4 @@ public class Card {
     {
         return (byte) value;
     }
-
-    public static void main(String[] args)
-    {
-        for(int i = 1; i < 53; i++)
-        {
-            System.out.println(new Card(i));
-        }
-    }
-
 }

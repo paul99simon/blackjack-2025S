@@ -1,7 +1,3 @@
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
-
 import counter.Counter;
 import dealer.Dealer;
 import player.Player;
@@ -13,10 +9,10 @@ public class Main
     private static void printHelp()
     {
         StringBuilder builder = new StringBuilder();
-        builder.append("usage: Main --option \n");
-        builder.append("    --dealer \n");
-        builder.append("    --player \n");
-        builder.append("    --counter\n");
+        builder.append("usage: Main --role=[option] where [option] equals\n");
+        builder.append("    dealer \n");
+        builder.append("    player \n");
+        builder.append("    counter\n");
         System.out.println(builder.toString());
     }
 
@@ -25,19 +21,20 @@ public class Main
         if(args.length != 1)
         {
             printHelp();
+            return;
         }
 
-        if(args[0].equals("--dealer"))
+        if(args[0].equals("--role=dealer"))
         {
             Dealer dealer = new Dealer();
             dealer.run();            
         }
-        else if(args[0].equals("--player"))
+        else if(args[0].equals("--role=player"))
         {
             Player player = new Player();
             player.run();
         }
-        else if(args[0].equals("--counter"))
+        else if(args[0].equals("--role=counter"))
         {
             Counter counter = new Counter();
             counter.run();

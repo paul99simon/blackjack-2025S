@@ -8,19 +8,18 @@ import java.util.Enumeration;
 public class Id {
     
     public byte[] id;
-    private static int id_counter = 0;
 
-    public Id()
+    public Id(int port)
     {
         id = new byte[8];
-        if( id_counter > 65535 ) throw new IllegalStateException("maximum number of instances exceeded");   
+        if( port > 65535 || port < 0)throw new IllegalStateException("maximum number of instances exceeded");   
         byte[] mac_addr = getMacAdress();
         for(int i = 0; i < 6; i++)
         {
             id[i] = mac_addr[i];
         }
-        id[6] = (byte) ((id_counter >> 8) & 0xFF);
-        id[7] = (byte) ((id_counter) & 0xFF);
+        id[6] = (byte) ((port >> 8) & 0xFF);
+        id[7] = (byte) ((port) & 0xFF);
         
     }
 
@@ -67,5 +66,15 @@ public class Id {
     public int hashCode()
     {
         return Arrays.hashCode(id);
+    }
+
+    @Override
+    public String toString()
+    {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < id.length; i++) {
+            builder.append(String.format("%02X%s", id[i], (i < id.length - 1) ? "-" : ""));
+        }
+        return builder.toString();
     }
 }
