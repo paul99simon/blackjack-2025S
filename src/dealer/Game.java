@@ -1,38 +1,50 @@
 package dealer;
 
-import java.net.InetAddress;
 import java.util.Deque;
+import java.util.Set;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
+import common.Card;
 import common.Hand;
 import common.Id;
-import common.Message;
-import common.Protocoll;
 
 public class Game
 {
+    public Object lock = new Object();
+    public volatile boolean paused;
+    private static int round_counter = 0;
+    public volatile int round_id;
 
     public static final int WAITING_PHASE = 0;
     public static final int BETTING_PHASE = 1;
     public static final int DRAW_PHASE = 2;
     public static final int PLAYER_PHASE = 3;
     public static final int DEALER_PHASE = 4; 
-
+    public volatile int currentPhase;
 
     private Dealer dealer;
-
-    public int currentPhase;
-
+    public Deque<Hand> active_hands;
+    public Set<Hand> finished_hands;
+    public Hand currentHand;
+    public Hand dealer_hand;
+    
+    public Stack<Card> draw_stack;
+    public Stack<Card> disc_stack;
     public int deckCount;
+    public boolean deckCountChanged;
 
-    public Deque<Hand> hands;
-    public Hand currentPlayer;    
-   
+    public int cut;
+    
     public Game(Dealer dealer)
     {
         this.dealer = dealer;
+        this.paused = true;
         this.currentPhase = WAITING_PHASE;
-        this.hands = new ConcurrentLinkedDeque<>();
+        this.active_hands = new ConcurrentLinkedDeque<>();
+        this.draw_stack = new Stack<>();
+        this.disc_stack = new Stack<>();
+        this.dealer_hand = new Hand(dealer.id);
     }
 
     public boolean inProgress()
@@ -40,48 +52,9 @@ public class Game
         return currentPhase != WAITING_PHASE;
     }
 
-    public void startBettinPhase()
-    {
-        if(currentPhase != WAITING_PHASE) throw new GameException("WAITING_PHASE must preceed BETTING_PHASE");
-        this.currentPhase = BETTING_PHASE;
-        for(Id id : dealer.players.keySet())
-        {
-            hands.add( new Hand(id));
-        }
-        dealer.sendBettingRequest();
-    }
-
-    public void startDrawPhase()
-    {
-        if(currentPhase != BETTING_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
-        currentPhase = DRAW_PHASE;
-        dealer.sendInitialCards(); 
-        startPlayerPhase();
-    }
-
-    public void startPlayerPhase()
-    {
-        if(currentPhase != DRAW_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
-        currentPhase = PLAYER_PHASE;
-        while(!hands.isEmpty())
-        {
-            currentPlayer = hands.removeFirst();
-            Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER);
-            InetAddress addr = dealer.players.get(currentPlayer.owner).getValue0();
-            int port = dealer.players.get(currentPlayer.owner).getValue1();
-            dealer.send(addr, port, actionRequest);
-        }
-        startDealerPhase();
-    }
-
-    public void startDealerPhase()
-    {
-
-    }
-
     public void placeBet(Id owner, int amount)
     {
-        for(Hand hand : hands)
+        for(Hand hand : active_hands)
         {
             if(hand.owner.equals(owner))
             {
@@ -92,10 +65,76 @@ public class Game
 
     public boolean allBetsPlaced()
     {
-        long missingBets = hands.stream().filter(h -> h.wager == 0).count();
+        long missingBets = active_hands.stream().filter(h -> h.wager == 0).count();
         return missingBets == 0;
     }
 
-   
+   public Card drawCard()
+    {
+        if(cut == 0)
+        {
+            shuffle();
+        }
+        cut--;
+        return draw_stack.pop();
+    }
 
+    public void setDeckCount(int deckCount) throws IllegalArgumentException
+    {
+        if(1 > deckCount || 8 < deckCount) throw new IllegalArgumentException("deckount must be between 1 and 8");
+        this.deckCount = deckCount;
+        this.deckCountChanged = true;
+    }
+
+    public void shuffle()
+    {
+        int[] arr;
+        
+        if(deckCountChanged)
+        {
+            arr = new int[deckCount * 52];
+            for(int j = 0; j < deckCount ; j++)
+            {
+                for(int i = 0; i < 52; i++)
+                {
+                    arr[j * 52 + i] = i + 1;
+                }
+            }
+        }
+        else
+        {
+            arr = new int[draw_stack.size() + disc_stack.size()];
+            int index = 0;
+            while(!draw_stack.empty())
+            {
+                arr[index++] = draw_stack.pop().value;
+            }
+
+            while(!disc_stack.empty())
+            {
+                arr[index++] = disc_stack.pop().value;
+            }
+        }
+
+        int maxCut = (int) (0.75 * arr.length);
+        int minCut = (int) (0.50 * arr.length);
+        cut = (int) (Math.random() * (maxCut - minCut) + minCut);
+
+        //Shuffle
+        draw_stack.clear();
+        disc_stack.clear();
+
+        for(int i = arr.length-1; i >= 0 ; i--)
+        {
+            int swap = (int) (Math.random() * i); 
+            int temp = arr[i];
+            arr[i] = arr[swap];
+            arr[swap] = temp;
+        }
+
+        for(int i = 0; i < arr.length; i++)
+        {
+            draw_stack.add(new Card((byte) arr[i]));
+        }
+    }
 }

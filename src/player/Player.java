@@ -30,19 +30,19 @@ public class Player extends UDP_Endpoint
     {
         super(Protocoll.Header.Role.PLAYER);
         this.hands = new LinkedList<>();
-        this.bankroll = Config.START_BANKROLL;
+        this.bankroll = Config.Game.START_BANKROLL;
     }
 
     @Override
     public void listen() {
         
-        byte[] buffer = new byte[Config.BUFFER_LENGTH];
+        byte[] buffer = new byte[Config.Network.BUFFER_LENGTH];
 
         while(true)
         {
             try
             {
-                DatagramPacket packet = new DatagramPacket(buffer, Config.BUFFER_LENGTH);
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
                 Message message = new Message(packet);
                 InetAddress addr = packet.getAddress();
@@ -91,7 +91,7 @@ public class Player extends UDP_Endpoint
                         });
                         send.start();
                         break;
-                    case Protocoll.Header.Type.INITIAL_CARD:
+                    case Protocoll.Header.Type.CARD:
                         Card card = new Card(message.payload[0]);
                         Hand hand = hands.get(0);
                         hand.cards.add(card);

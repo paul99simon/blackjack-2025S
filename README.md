@@ -26,6 +26,11 @@
 </tr>
 <tr>
     <th>17-24</th>
+    <td colspan='4' style="text-align:center;">amount</td>
+    <td colspan='4' style="text-align:center;">hand_id</td>
+</tr>
+<tr>
+    <th>25-32</th>
     <td style="text-align:center;">mt </td>
     <td style="text-align:center;">st</td>
     <td style="text-align:center;">0</td>
@@ -36,7 +41,7 @@
     <td style="text-align:center;">0</td>
 </tr>
 <tr>
-    <th>25-4096</th>
+    <th>33-4096</th>
     <td colspan='8' style="text-align:center;">Payload</td>
 </tr>
 </table>

@@ -80,6 +80,7 @@ public abstract class UDP_Endpoint implements Runnable
             {
                 System.out.println(e.getMessage());
             }
+            //TODO: remove println
             System.out.println("acknowledge:"+ackMessage);
         }
     }
@@ -91,7 +92,8 @@ public abstract class UDP_Endpoint implements Runnable
         DatagramPacket packet = new DatagramPacket(data, data.length, addr, port);
         
         int tries = 0;
-        while(tries < Config.MAX_TRIES)
+        int maxTries = Config.Network.TRIES_LINEAR + Config.Network.TRIES_NON_LINEAR;
+        while(tries < maxTries)
         {
             synchronized(acknowledge)
             {
@@ -101,19 +103,27 @@ public abstract class UDP_Endpoint implements Runnable
                     break;
                 }
             }
-            if(tries > Config.MAX_TRIES) throw new MaxRetriesExceededException("maximum tries exceeded");
             socket.send(packet);
+            //TODO: remove println
             System.out.println("sending:" + message);
             tries++;
             try
             {
-                Thread.sleep((long) Math.pow(2,tries) * Config.TIMEOUT_MS);
+                if(tries < Config.Network.TRIES_LINEAR)
+                {
+                    Thread.sleep(Config.Network.TIMEOUT_MS);
+                }
+                else
+                {
+                    Thread.sleep((long) Math.pow(2, tries - Config.Network.TRIES_LINEAR) * Config.Network.TIMEOUT_MS);
+                }
             }
             catch (InterruptedException e)
             {
                 System.out.println(e.getMessage());
             }
         }
+        if(tries == maxTries) throw new MaxRetriesExceededException("maximum tries exceeded");
     }
 
 }

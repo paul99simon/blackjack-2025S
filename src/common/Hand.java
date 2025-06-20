@@ -1,5 +1,6 @@
 package common;
 
+import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -8,33 +9,43 @@ import java.util.Set;
 public class Hand
 {
     public final Id owner;
+    //TODO: you know what to do...
+    public final int round_id;
+
+    private static int id_counter = 0;
+    public final int id;
+
     public List<Card> cards;
     public int wager;
     public boolean active;
+    public boolean actionPerformed;
     public boolean split;
 
-    public Hand(Id owner)
+    
+    public Hand(int id, Id owner, int wager, boolean split)
     {
-        this(owner, 0);
-    }
-
-    public Hand(Id owner, int wager)
-    {
+        this.id = id;
         this.owner = owner;
         this.cards = new LinkedList<Card>();
         this.wager = wager;
         this.active = true;
-        this.split = false;
+        this.actionPerformed = false;
+        this.split = split;
+    }
+
+    public Hand(Id owner)
+    {
+        this(id_counter++, owner, 0, false);
+    }
+
+    public Hand(Id owner, int wager)
+    {
+        this(id_counter++, owner, wager, false);
     }
 
     public Hand(Hand split)
     {
-        this.owner = split.owner;
-        this.cards = new LinkedList<>();
-        this.cards.add(split.cards.remove(0));
-        this.wager = split.wager;
-        this.split = true;
-        this.active = true;
+        this(id_counter++, split.owner, split.wager, true);
         split.split = true;
     }
 
@@ -110,6 +121,25 @@ public class Hand
         }
         builder.deleteCharAt(builder.length()-1);
         return builder.toString();
+    }
+
+    byte[] toByte()
+    {        
+        byte[] arr = new byte[cards.size() + 5];
+        
+        ByteBuffer buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(wager);
+        arr[0] = buffer.get(0);
+        arr[1] = buffer.get(1);
+        arr[2] = buffer.get(2);
+        arr[3] = buffer.get(3);
+        arr[4] = (byte) (split ? 1 : 0);
+        
+        for(int i = 0; i < cards.size(); i++)
+        {
+            arr[i+5] = cards.get(i).value;
+        }
+
+        return arr;
     }
 
 }

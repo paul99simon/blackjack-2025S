@@ -14,7 +14,7 @@ public final class Protocoll {
 
     public static final class Header
     {
-        public static final int LENGTH = 24;  
+        public static final int LENGTH = 32;  
 
         public static final class Type
         {
@@ -30,8 +30,7 @@ public final class Protocoll {
             public static final int AMOUNT = 0x0A;
             public static final int DECKCOUNT = 0x0B;
             public static final int SHUFFLED = 0x0C;
-            public static final int INITIAL_CARD = 0x0D;
-            public static final int CARD = 0x0E;
+            public static final int CARD = 0x0D;
         }
 
         public static final class Role
