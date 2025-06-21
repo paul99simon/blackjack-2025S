@@ -1,19 +1,21 @@
 package dealer;
 
+import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Deque;
 import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 import common.Card;
-import common.Hand;
-import common.Id;
+import common.Message;
+import common.endpoint.InstanceId;
+import common.endpoint.MaxRetriesExceededException;
 
 public class Game
 {
     public Object lock = new Object();
     public volatile boolean paused;
-    private static int round_counter = 0;
     public volatile int round_id;
 
     public static final int WAITING_PHASE = 0;
@@ -40,11 +42,13 @@ public class Game
     {
         this.dealer = dealer;
         this.paused = true;
+        this.round_id = 0;
         this.currentPhase = WAITING_PHASE;
         this.active_hands = new ConcurrentLinkedDeque<>();
         this.draw_stack = new Stack<>();
         this.disc_stack = new Stack<>();
-        this.dealer_hand = new Hand(dealer.id);
+        this.dealer_hand = new Hand(this.round_id, dealer.id);
+
     }
 
     public boolean inProgress()
@@ -52,11 +56,11 @@ public class Game
         return currentPhase != WAITING_PHASE;
     }
 
-    public void placeBet(Id owner, int amount)
+    public void placeBet(InstanceId owner, int amount)
     {
         for(Hand hand : active_hands)
         {
-            if(hand.owner.equals(owner))
+            if(hand.owner_id.equals(owner))
             {
                 hand.wager = amount;
             }
@@ -136,5 +140,27 @@ public class Game
         {
             draw_stack.add(new Card((byte) arr[i]));
         }
+
+        if(dealer.counter != null)
+        {            
+            InetAddress addr = dealer.counter.getValue0();
+            int port = dealer.counter.getValue1();
+            Message shuffledMessage = Message.shuffledMessage(dealer.id, draw_stack);
+            try
+            {
+                dealer.send(addr, port, shuffledMessage);
+            }
+            catch(IOException e)
+            {
+
+            }
+            catch(MaxRetriesExceededException e)
+            {
+
+            }   
+        }
+
+
     }
+
 }

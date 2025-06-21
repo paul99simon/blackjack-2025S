@@ -14,23 +14,22 @@ public final class Protocoll {
 
     public static final class Header
     {
-        public static final int LENGTH = 32;  
+        public static final byte LENGTH = 24;  
 
         public static final class Type
         {
-            public static final int ACK = 0x01;
-            public static final int SYN = 0x02;
-            public static final int FIN = 0x03;
-            public static final int ACTION = 0x04;
-            public static final int HIT = 0x05;
-            public static final int STAND = 0x06;
-            public static final int SPLIT = 0x07;
-            public static final int DOUBLE_DOWN = 0x08;
-            public static final int SURRENDER = 0x09;
-            public static final int AMOUNT = 0x0A;
-            public static final int DECKCOUNT = 0x0B;
-            public static final int SHUFFLED = 0x0C;
-            public static final int CARD = 0x0D;
+            public static final byte ACK = 0x01;
+            public static final byte SYN = 0x02;
+            public static final byte FIN = 0x03;
+            public static final byte BET = 0x04;
+            public static final byte ACTION = 0x05;
+            public static final byte WINNINGS = 0x06;
+            public static final byte DECKCOUNT = 0x07;
+            public static final byte SHUFFLED = 0x08;
+            public static final byte CARDS = 0x09;
+            public static final byte UPCARD = 0x0A;
+            public static final byte STATISTICS = 0x0B;
+            public static final byte WINS_STATISTICS = 0x0C;
         }
 
         public static final class Role

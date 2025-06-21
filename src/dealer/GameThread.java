@@ -2,14 +2,15 @@ package dealer;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.LinkedList;
+import java.util.List;
 
 import common.Card;
-import common.Hand;
-import common.Id;
-import common.MaxRetriesExceededException;
 import common.Message;
 import common.Protocoll;
-import common.Config;
+import common.endpoint.InstanceId;
+import common.endpoint.MaxRetriesExceededException;
+import common.Context;
 
 public class GameThread extends Thread
 {
@@ -37,12 +38,13 @@ public class GameThread extends Thread
                         game.lock.wait();
                     }   
                 }
+                game.round_id++;
                 bettinPhase();
                 synchronized(game.lock)
                 {
                     while(!ready)
                     {
-                        game.lock.wait(Config.Game.BETTING_PHASE_DURATION);
+                        game.lock.wait(Context.Game.BETTING_PHASE_DURATION);
                     }
                     ready = false;
                 }
@@ -56,14 +58,15 @@ public class GameThread extends Thread
                             game.active_hands.remove(hand);
                             synchronized(dealer.players)
                             {
-                                dealer.players.remove(hand.owner);
+                                dealer.players.remove(hand.owner_id);
                             }
                         }
                     }
                 }
                 drawPhase();
                 playerPhase();
-                startDealerPhase();
+                dealerPhase();
+                game.currentPhase = Game.WAITING_PHASE;
                 
             }
             catch(InterruptedException e)
@@ -80,13 +83,13 @@ public class GameThread extends Thread
         
         synchronized(dealer.players)
         {
-            for(Id id : dealer.players.keySet())
+            for(InstanceId id : dealer.players.keySet())
             {
-                Hand hand = new Hand(id);
-                game.active_hands.add( hand);
+                Hand hand = new Hand(game.round_id, id);
+                game.active_hands.add(hand);
                 InetAddress addr = dealer.players.get(id).getValue0();
                 int port = dealer.players.get(id).getValue1();
-                Message bettingRequest = Message.amountMessage(id, Protocoll.Header.Role.DEALER, 0);
+                Message bettingRequest = Message.betMessage(id, Protocoll.Header.Role.DEALER, 0);
                 try
                 {
                     dealer.send(addr, port, bettingRequest);
@@ -108,28 +111,36 @@ public class GameThread extends Thread
     {
         if(game.currentPhase != Game.BETTING_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
         game.currentPhase = Game.DRAW_PHASE;
-        
+
+        InetAddress counter_addr;
+        int counter_port;
+        synchronized(dealer.counter)
+        {
+            counter_addr = dealer.counter.getValue0();
+            counter_port = dealer.counter.getValue1();
+        }
+
         for(Hand hand : game.active_hands)
         {
-            Card card1 = game.drawCard();
-            Card card2 = game.drawCard();
-            Message message1 = Message.cardMessage(dealer.id, Protocoll.Header.Role.DEALER, hand.id, card1);
-            Message message2 = Message.cardMessage(dealer.id, Protocoll.Header.Role.DEALER, hand.id, card2);
+            List<Card> cards = new LinkedList<>();
+            cards.add(game.drawCard());
+            cards.add(game.drawCard());
+            Message message = Message.cardsMessage(dealer.id, Protocoll.Header.Role.DEALER, cards);
             
-            InetAddress addr;
-            int port;
+            InetAddress player_addr;
+            int player_port;
 
             synchronized(dealer.players)
             {
-                addr = dealer.players.get(hand.owner).getValue0();
-                port = dealer.players.get(hand.owner).getValue1();
+                player_addr = dealer.players.get(hand.owner_id).getValue0();
+                player_port = dealer.players.get(hand.owner_id).getValue1();
             }
+
             try
             {
-                dealer.send(addr, port, message1);
-                dealer.send(addr, port, message2);
-                hand.cards.add(card1);
-                hand.cards.add(card2);
+                dealer.send(counter_addr, counter_port, message);
+                dealer.send(player_addr, player_port, message);
+                hand.cards.addAll(cards);
             }
             catch(IOException e)
             {
@@ -137,10 +148,9 @@ public class GameThread extends Thread
             }
             catch(MaxRetriesExceededException e)
             {
-                game.draw_stack.push(card1);
-                game.draw_stack.push(card2);
+                game.draw_stack.addAll(cards);
                 game.active_hands.remove(hand);
-                dealer.players.remove(hand.owner);
+                dealer.players.remove(hand.owner_id);
             }
         }
         game.dealer_hand.add(game.drawCard());
@@ -148,31 +158,31 @@ public class GameThread extends Thread
 
     public void playerPhase()
     {
-        if(game.currentPhase != Game.DRAW_PHASE) throw new GameException("BETTING_PHASE must preceed DRAW_PHASE");
+        if(game.currentPhase != Game.DRAW_PHASE) throw new GameException("DRAW_PHASE must preceed PLAYER_PHASE");
         game.currentPhase = Game.PLAYER_PHASE;
         
         while(!game.active_hands.isEmpty())
         {
             game.currentHand = game.active_hands.removeFirst();                
-            Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER, game.currentHand.id);
+            Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER, game.currentHand);
             InetAddress addr;
             int port;
             synchronized(dealer.players)
             {
-                addr = dealer.players.get(game.currentHand.owner).getValue0();
-                port = dealer.players.get(game.currentHand.owner).getValue1();
+                addr = dealer.players.get(game.currentHand.owner_id).getValue0();
+                port = dealer.players.get(game.currentHand.owner_id).getValue1();
             }
             while(game.currentHand.active)
             {
                 try
                 {
                     dealer.send(addr, port, actionRequest);
-                    synchronized(game.lock){game.lock.wait(Config.Game.PLAYER_MOVE_DURATION);}
+                    synchronized(game.lock){game.lock.wait(Context.Game.PLAYER_MOVE_DURATION);}
                     if(! game.currentHand.actionPerformed)
                     {
                         synchronized(dealer.players)
                         {
-                            dealer.players.remove(game.currentHand.owner);
+                            dealer.players.remove(game.currentHand.owner_id);
                             game.disc_stack.addAll(game.currentHand.cards);
                         }
                     }
@@ -191,12 +201,12 @@ public class GameThread extends Thread
                 }
             }
         }
-        startDealerPhase();
     }
 
-    public void startDealerPhase()
+    public void dealerPhase()
     {
-
+        if(game.currentPhase != Game.PLAYER_PHASE) throw new GameException("PLAYER_PHASE must preceed DEALER_PHASE");
+        game.currentPhase = Game.DEALER_PHASE;
     }
 
 }

@@ -1,15 +1,15 @@
-package common;
+package common.endpoint;
 
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.Arrays;
 import java.util.Enumeration;
 
-public class Id {
+public class InstanceId {
     
     public byte[] id;
 
-    public Id(int port)
+    public InstanceId(int port)
     {
         id = new byte[8];
         if( port > 65535 || port < 0)throw new IllegalStateException("maximum number of instances exceeded");   
@@ -23,7 +23,7 @@ public class Id {
         
     }
 
-    public Id(byte[] id)
+    public InstanceId(byte[] id)
     {
         if(id.length != 8) throw new IllegalArgumentException("id must have length 8");
         this.id = id;
@@ -54,7 +54,7 @@ public class Id {
     {
         if(this == object) return true;
         if(object == null || getClass() != object.getClass()) return false;
-        Id temp = (Id) object;
+        InstanceId temp = (InstanceId) object;
         for(int i = 0; i < 8; i++)
         {
             if(id[i] != temp.id[i]) return false;

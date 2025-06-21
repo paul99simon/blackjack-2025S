@@ -2,34 +2,47 @@ package common;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
 
-public record StatisticsEntry(int round_id, Id player_id, int hand_id, boolean win, boolean blackJack, Hand hand)
+import common.endpoint.InstanceId;
+
+public record StatisticsEntry(int round_id, byte role, InstanceId player_id, int hand_id, boolean win, boolean blackJack, boolean split, int wager, int winnings, int deckcount, List<Card> hand)
 {
-
     public static StatisticsEntry fromByte(byte[] arr)
     {
         int round_id = ByteBuffer.wrap(Arrays.copyOfRange(arr, 0, 4)).order(Protocoll.BYTE_ORDER).getInt();
-        Id player_id = new Id(Arrays.copyOfRange(arr, 4, 12));
-        int hand_id = ByteBuffer.wrap(Arrays.copyOfRange(arr, 12, 16)).order(Protocoll.BYTE_ORDER).getInt();
-        boolean win = arr[16] == 0 ? false : true;
-        boolean blackJack = arr[17] == 0 ? false : true;
+
+        byte role = arr[4];
         
-        int amount = ByteBuffer.wrap(Arrays.copyOfRange(arr, 16, 20)).getInt();
-        boolean split = arr[20] == 0 ? false : true;
-        Hand hand = new Hand(hand_id, player_id, amount, split);
-        for(int i = 21 ; i < arr.length; i++)
+        InstanceId player_id = new InstanceId(Arrays.copyOfRange(arr, 5, 13));
+        
+        int hand_id = ByteBuffer.wrap(Arrays.copyOfRange(arr, 13, 17)).order(Protocoll.BYTE_ORDER).getInt();
+        
+        boolean win = arr[17] == 0 ? false : true;
+        
+        boolean blackJack = arr[18] == 0 ? false : true;
+        
+        boolean split = arr[19] == 0 ? false : true;
+        
+        int wager = ByteBuffer.wrap(Arrays.copyOfRange(arr, 20, 24)).getInt();
+        
+        int winnings = ByteBuffer.wrap(Arrays.copyOfRange(arr, 24,28)).getInt();
+        int deckCount = ByteBuffer.wrap(Arrays.copyOfRange(arr, 28,32)).getInt();
+
+        List<Card> hand = new LinkedList<Card>();
+        for(int i = 32 ; i < arr.length; i++)
         {
             Card card = new Card(arr[i]);
             hand.add(card);
         }
-        return new StatisticsEntry(round_id, player_id, hand_id, win, blackJack, hand);
+        
+        return new StatisticsEntry(round_id, role, player_id, hand_id, win, blackJack, split, wager, winnings, deckCount, hand);
     }
-
 
     public byte[] toByte()
     {
-        byte[] hand_bytes = hand.toByte();
-        byte[] arr = new byte[18 + hand_bytes.length];
+        byte[] arr = new byte[27 + hand.size()];
 
         ByteBuffer buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(round_id);
         arr[0] = buffer.get(0);
@@ -37,28 +50,49 @@ public record StatisticsEntry(int round_id, Id player_id, int hand_id, boolean w
         arr[2] = buffer.get(2);
         arr[3] = buffer.get(3);
         
-        arr[4] = player_id.id[0];
-        arr[5] = player_id.id[1];
-        arr[6] = player_id.id[2];
-        arr[7] = player_id.id[3];
-        arr[8] = player_id.id[4];
-        arr[9] = player_id.id[5];
-        arr[10] = player_id.id[6];
-        arr[11] = player_id.id[7];
+        arr[4] = role;
+
+        arr[5] = player_id.id[0];
+        arr[6] = player_id.id[1];
+        arr[7] = player_id.id[2];
+        arr[8] = player_id.id[3];
+        arr[9] = player_id.id[4];
+        arr[10] = player_id.id[5];
+        arr[11] = player_id.id[6];
+        arr[12] = player_id.id[7];
 
         buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(hand_id);
-        arr[12] = buffer.get(0);
-        arr[13] = buffer.get(1);
-        arr[14] = buffer.get(2);
-        arr[15] = buffer.get(3);
+        arr[13] = buffer.get(0);
+        arr[14] = buffer.get(1);
+        arr[15] = buffer.get(2);
+        arr[16] = buffer.get(3);
 
-        arr[16] = (byte) (win ? 1 : 0);
-        arr[17] = (byte) (blackJack ? 1 : 0);
+        arr[17] = (byte) (win ? 1 : 0);
+        arr[18] = (byte) (blackJack ? 1 : 0);
+        arr[19] = (byte) (split ? 1 : 0);
 
-        int i = 18;
-        for(Byte b : hand_bytes)
+        buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(wager);
+        arr[20] = buffer.get(0);
+        arr[21] = buffer.get(1);
+        arr[22] = buffer.get(2);
+        arr[23] = buffer.get(3);
+
+        buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(winnings);
+        arr[24] = buffer.get(0);
+        arr[25] = buffer.get(1);
+        arr[26] = buffer.get(2);
+        arr[27] = buffer.get(3);
+
+        buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(deckcount);
+        arr[28] = buffer.get(0);
+        arr[29] = buffer.get(1);
+        arr[30] = buffer.get(2);
+        arr[31] = buffer.get(3);
+        
+        int i = 32;
+        for(Card c : hand)
         {
-            arr[i] = b;
+            arr[i++] = c.value;
         }
 
         return arr;

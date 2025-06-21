@@ -1,0 +1,15 @@
+package player;
+
+public class MartingaleStrategy implements BettingStrategy
+{
+    int lostCounter = 0;
+    int unit = 0;
+
+    public MartingaleStrategy(int unit)
+    {
+        this.unit = unit;
+    }
+
+    @Override
+    public void get
+}

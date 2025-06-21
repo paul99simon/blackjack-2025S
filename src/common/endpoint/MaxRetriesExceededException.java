@@ -1,4 +1,4 @@
-package common;
+package common.endpoint;
 
 public class MaxRetriesExceededException extends RuntimeException
 {

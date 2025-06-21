@@ -3,6 +3,12 @@ package common;
 import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Stack;
+
+import common.endpoint.InstanceId;
+import dealer.Hand;
 
 public class Message {
     
@@ -10,14 +16,12 @@ public class Message {
     
     public int    message_length;
     public int    message_id;
-    public Id     sender_id;
-    public byte   sender_type;
+    public InstanceId     sender_id;
+    public byte   sender_role;
     public byte   message_type;
-    public int    amount; //only relevant when message type is AMOUNT
-    public int    hand_id; //only relevant when message type is action or card;
     public byte[] payload;
 
-    private Message(Id sender_id, int sender_type, int message_id, int message_type, int amount, int hand_id, byte[] payload)
+    private Message(InstanceId sender_id, int sender_type, int message_id, int message_type, byte[] payload)
     {
         if(payload == null)
         {
@@ -28,11 +32,9 @@ public class Message {
             this.message_length = payload.length + Protocoll.Header.LENGTH ;
         }
         this.sender_id = sender_id;
-        this.sender_type = (byte) sender_type;
+        this.sender_role = (byte) sender_type;
         this.message_type = (byte) message_type;
         this.message_id = message_id;
-        this.amount = amount;
-        this.hand_id = hand_id;
         this.payload = payload;
     }
 
@@ -46,44 +48,118 @@ public class Message {
         byte[] message_id = Arrays.copyOfRange(data, 4, 8);
         this.message_id = ByteBuffer.wrap(message_id).order(Protocoll.BYTE_ORDER).getInt();
 
-        this.sender_id = new Id(Arrays.copyOfRange(data, 8 , 16));
+        this.sender_id = new InstanceId(Arrays.copyOfRange(data, 8 , 16));
 
-        byte[] amount = Arrays.copyOfRange(data, 16, 20);
-        this.amount = ByteBuffer.wrap(amount).order(Protocoll.BYTE_ORDER).getInt();
-
-        byte[] hand_id = Arrays.copyOfRange(data, 20, 24);
-        this.hand_id = ByteBuffer.wrap(hand_id).order(Protocoll.BYTE_ORDER).getInt();
-
-        this.message_type = data[24];
-        this.sender_type = data[25];
+        this.message_type = data[16];
+        this.sender_role = data[17];
         this.payload = Arrays.copyOfRange(data, Protocoll.Header.LENGTH, this.message_length);
     }
 
-    public static Message ackMessage(Id sender_id, byte sender_type, Message message)
+    public MessageIdentifier getIdentifier()
     {
-        return new Message(sender_id, sender_type, message.message_id, Protocoll.Header.Type.ACK, 0, 0, null);
+        return new MessageIdentifier(sender_id, message_id);
     }
 
-    public static Message synMessage(Id sender_id, byte sender_type)
+    public static Message ackMessage(InstanceId sender_id, byte sender_type, Message message)
     {
-        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.SYN, 0,0, null);
+        return new Message(sender_id, sender_type, message.message_id, Protocoll.Header.Type.ACK, null);
     }
 
-    public static Message amountMessage(Id sender_id, byte sender_type, int amount)
+    public static Message synMessage(InstanceId sender_id, byte sender_type)
     {
-        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.AMOUNT, amount,0, null);
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.SYN, null);
     }
 
-    public static Message cardMessage(Id sender_id, byte sender_type, int hand_id, Card card)
+    public static Message betMessage(InstanceId sender_id, byte sender_type, int amount)
+    {
+        byte[] payload = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(amount).array();
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.BET, payload);
+    }
+
+    public static Message cardsMessage(InstanceId sender_id, byte sender_type, List<Card> cards)
+    {
+        byte[] payload = new byte[cards.size()];
+        for(int i = 0; i < payload.length; i++)
+        {
+            payload[i] = cards.get(i).value;
+        }
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.CARDS, payload);
+    }
+
+    public static Message upcardMessage(InstanceId sender_id, Card card)
     {
         byte[] payload = new byte[1];
         payload[0] = card.value;
-        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.CARD,0, hand_id, payload);
+        return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.UPCARD, payload);
     }
 
-    public static Message actionRequest(Id sender_id, byte sender_type, int hand_id)
+    public static Message actionRequest(InstanceId sender_id, byte sender_type, Hand hand)
     {
-        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.ACTION, 0, hand_id, null);
+        byte[] payload = new byte[hand.cards.size()];
+        for(int i = 0; i < payload.length; i++)
+        {
+            payload[i] = hand.cards.get(i).value;
+        }
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.ACTION, payload);
+    }
+
+    public static Message actionMessage(InstanceId sender_id, byte sender_type, byte action)
+    {
+        byte[] payload = new byte[1];
+        payload[0] = action;
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.ACTION, payload);
+    }
+
+    public static Message shuffledMessage(InstanceId sender_id, Stack<Card> draw_stack)
+    {
+        byte[] payload = new byte[draw_stack.size()];
+        int index = 0;
+        for(Card card : draw_stack)
+        {
+            payload[index++] = card.value;
+        }
+
+        return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.SHUFFLED, payload);
+    }
+
+    public static Message deckCountMessage(InstanceId sender_id, int deckCount)
+    {
+        byte[] payload = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(deckCount).array();
+        return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.DECKCOUNT, payload);
+    }
+
+    public byte getAction()
+    {
+        if(message_type != Protocoll.Header.Type.ACTION) throw new IllegalStateException("message is not of type ACTION");
+        return payload[0];
+    }
+
+    public int getInt()
+    {
+        if(message_type != Protocoll.Header.Type.BET || message_type != Protocoll.Header.Type.DECKCOUNT || message_type != Protocoll.Header.Type.WINNINGS)
+        {
+            throw new IllegalStateException("message is not of type BET or DECKCOUNT or WINNIGS");
+        } 
+        return ByteBuffer.wrap(payload).order(Protocoll.BYTE_ORDER).getInt();
+    }
+
+    public Card getCard()
+    {
+        if(message_type != Protocoll.Header.Type.UPCARD) throw new IllegalStateException("message is not of type UPCARD");
+        return new Card(payload[0]);
+    }
+
+    public List<Card> getCards()
+    {
+        if(message_type != Protocoll.Header.Type.CARDS) throw new IllegalStateException("message is not of type CARDS");
+        List<Card> cards = new LinkedList<>();
+
+        for(int i = 0; i < payload.length; i++)
+        {
+            cards.add(new Card(payload[i]));
+        }
+
+        return cards;
     }
 
     public byte[] getBytes()
@@ -111,21 +187,8 @@ public class Message {
         arr[14] = this.sender_id.id[6];
         arr[15] = this.sender_id.id[7];
 
-        buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(amount);
-        arr[16] = buffer.get(0);
-        arr[17] = buffer.get(1);
-        arr[18] = buffer.get(2);
-        arr[19] = buffer.get(3);
-
-        buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(hand_id);
-        arr[20] = buffer.get(0);
-        arr[21] = buffer.get(1);
-        arr[22] = buffer.get(2);
-        arr[23] = buffer.get(3);
-
-
-        arr[24] = (byte) message_type;
-        arr[25] = (byte) sender_type;
+        arr[16] = (byte) message_type;
+        arr[17] = (byte) sender_role;
 
         if(payload != null)
         {
@@ -145,10 +208,8 @@ public class Message {
         builder.append("{length: ").append(message_length).append("}").append(Protocoll.SEPERATOR);
         builder.append("{message_id: ").append(message_id).append("}").append(Protocoll.SEPERATOR);
         builder.append("{sender_id: ").append(sender_id).append("}").append(Protocoll.SEPERATOR);
-        builder.append("{amount: ").append(amount).append("}").append(Protocoll.SEPERATOR);
-        builder.append("{hand_id: ").append(hand_id).append("}").append(Protocoll.SEPERATOR);
         builder.append("{message_type: ").append(message_type).append("}").append(Protocoll.SEPERATOR);
-        builder.append("{sender_type: ").append(sender_type).append("}").append(Protocoll.SEPERATOR);
+        builder.append("{sender_type: ").append(sender_role).append("}").append(Protocoll.SEPERATOR);
         if(payload != null)
         {
             builder.append("{payload: ");

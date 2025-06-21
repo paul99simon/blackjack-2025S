@@ -1,15 +1,11 @@
 package dealer;
 
-import common.Config;
-import common.Id;
 import common.Message;
 import common.Protocoll;
-import common.UDP_Endpoint;
+import common.endpoint.InstanceId;
+import common.endpoint.UDP_Endpoint;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,7 +16,7 @@ import org.javatuples.Pair;
 public class Dealer extends UDP_Endpoint
 {
     public Pair<InetAddress, Integer> counter;
-    public Map<Id, Pair<InetAddress, Integer>> players;
+    public Map<InstanceId, Pair<InetAddress, Integer>> players;
         
     public Game game;
     public GameThread gameThread;
@@ -37,115 +33,96 @@ public class Dealer extends UDP_Endpoint
         this.players = Collections.synchronizedMap(new HashMap<>());
         game = new Game(this);
         game.setDeckCount(deckCount);
+        game.shuffle();
         gameThread = new GameThread(this, game);
         gameThread.start();
     } 
 
     @Override
-    public void listen()
+    public void processMessage(InetAddress sender_addr, int sender_port, Message message)
     {
-        byte[] buffer = new byte[Config.Network.BUFFER_LENGTH];
-
-        while(true)
+        switch (message.message_type) 
         {
-            try
-            {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
-                Message message = new Message(packet);
-                System.out.println("received:" + message);
-                InetAddress addr = packet.getAddress();
-                int port = packet.getPort();
-                acknowledge(addr, port, message);
-
-                switch (message.message_type) {
-                    case Protocoll.Header.Type.ACK:
-                        synchronized(acknowledge)
-                        {
-                            acknowledge.put(message.message_id, message);
-                        }
-                        break;
-                    case Protocoll.Header.Type.SYN:
-                        if(message.sender_type == Protocoll.Header.Role.DEALER) break;
-
-                        switch (message.sender_type)
-                        {
-                            case Protocoll.Header.Role.COUNTER:
-                                counter = new Pair<InetAddress,Integer>(addr, port);
-                                break;
-                            case Protocoll.Header.Role.PLAYER:
-                                players.put(message.sender_id, new Pair<InetAddress, Integer>(addr, port));
-                                break;
-                            default:
-                                break;
-                        }
-
-                        Message synMessage = Message.synMessage(id, Protocoll.Header.Role.DEALER);
-                        Thread synThread = new Thread(() ->
+            case Protocoll.Header.Type.SYN:
+                if(message.sender_role == Protocoll.Header.Role.DEALER) break;
+                Message synMessage = Message.synMessage(id, Protocoll.Header.Role.DEALER);
+                Thread synThread = new Thread();
+                switch (message.sender_role)
+                {
+                    case Protocoll.Header.Role.COUNTER:
+                        counter = new Pair<InetAddress,Integer>(sender_addr, sender_port);
+                        Message deckCountMessage = Message.deckCountMessage(id, game.deckCount);
+                        Message shuffledMessage = Message.shuffledMessage(id, game.draw_stack);
+                        synThread = new Thread(() ->
                         {
                             try
                             {
-                                send(addr, port, synMessage);
+                                send(counter.getValue0(), counter.getValue1(), synMessage);
+                                send(counter.getValue0(), counter.getValue1(), deckCountMessage);
+                                send(counter.getValue0(), counter.getValue1(), shuffledMessage);
                             }
                             catch (IOException e)
                             {
                                 System.out.println(e.getMessage());
                             }
                         });
-                        synThread.start();
                         break;
-                    case Protocoll.Header.Type.FIN:
-                        if(message.message_type == Protocoll.Header.Role.DEALER) break;
-                        break;
-                    case Protocoll.Header.Type.AMOUNT:
-                        if(message.sender_type != Protocoll.Header.Role.PLAYER) break;
-                        if(game.currentPhase != Game.BETTING_PHASE) break;
-
-                        game.placeBet(message.sender_id, message.amount);
-                        if(game.allBetsPlaced())
+                    case Protocoll.Header.Role.PLAYER:
+                        players.put(message.sender_id, new Pair<InetAddress, Integer>(sender_addr, sender_port));
+                        synThread = new Thread(() ->
                         {
-                            synchronized(game.lock)
+                            try
                             {
-                                gameThread.ready=true;
-                                game.lock.notify();
+                                send(sender_addr, sender_port, synMessage);
                             }
-                        }
+                            catch (IOException e)
+                            {
+                                System.out.println(e.getMessage());
+                            }
+                        });
                         break;
                     default:
                         break;
                 }
-            }
-            catch(IOException e)
-            {
-                System.out.println(e.getMessage());
-            }    
+                synThread.start();
+                break;
+            case Protocoll.Header.Type.FIN:
+                if(message.message_type == Protocoll.Header.Role.DEALER) break;
+                break;
+            case Protocoll.Header.Type.BET:
+                if(message.sender_role != Protocoll.Header.Role.PLAYER) break;
+                if(game.currentPhase != Game.BETTING_PHASE) break;
+
+                game.placeBet(message.sender_id, message.getInt());
+                if(game.allBetsPlaced())
+                {
+                    synchronized(game.lock)
+                    {
+                        gameThread.ready=true;
+                        game.lock.notify();
+                    }
+                }
+                break;
+            default:
+                break;
         }
     }
 
     @Override
-    public void processInput()
+    public void processInput(String input)
     {
-        try
+        if(input.equals("start"))
         {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-
-            while(true)
-            {
-                String input = reader.readLine();
-                if(input.equals("start"))
-                {
-                    game.paused = false;
-                    synchronized(game.lock) {game.lock.notify();}
-                }
-                else
-                {
-                    printHelp();
-                }
-            }
+            game.paused = false;
+            synchronized(game.lock) {game.lock.notify();}
         }
-        catch (IOException e)
+        else if(input.equals("pause"))
         {
-            System.out.printf("Exception: %s\n",e.getMessage());
+            game.paused = true;
+        }
+        else
+        {
+            printHelp();
         }
     }
 
@@ -157,10 +134,5 @@ public class Dealer extends UDP_Endpoint
         builder.append("    start");
         System.out.println(builder.toString());
     }
-    
-    //------------------------------------------------------------------------------------------------------------------------------------
-    // Card related stuff
-    //------------------------------------------------------------------------------------------------------------------------------------
-
     
 }

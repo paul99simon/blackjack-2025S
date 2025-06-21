@@ -1,51 +1,55 @@
-package common;
+package dealer;
 
-import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
+import common.Card;
+import common.Protocoll;
+import common.endpoint.InstanceId;
+
 public class Hand
-{
-    public final Id owner;
-    //TODO: you know what to do...
+{   
     public final int round_id;
+    public final InstanceId owner_id;
 
     private static int id_counter = 0;
-    public final int id;
+    public final int hand_id;
 
     public List<Card> cards;
     public int wager;
     public boolean active;
     public boolean actionPerformed;
     public boolean split;
-
     
-    public Hand(int id, Id owner, int wager, boolean split)
+    private Hand(int round_id, InstanceId owner_id, int hand_id, int wager, boolean split)
     {
-        this.id = id;
-        this.owner = owner;
+        this.round_id = round_id;
+        this.hand_id = hand_id;
+        this.owner_id = owner_id;
         this.cards = new LinkedList<Card>();
         this.wager = wager;
+        this.split = split;
         this.active = true;
         this.actionPerformed = false;
-        this.split = split;
     }
 
-    public Hand(Id owner)
+
+    public Hand(int round_id, InstanceId owner_id)
     {
-        this(id_counter++, owner, 0, false);
+        this(round_id, owner_id, id_counter++, 0, false);
     }
 
-    public Hand(Id owner, int wager)
+    public Hand(int round_id, InstanceId owner_id, int wager)
     {
-        this(id_counter++, owner, wager, false);
+        this(round_id, owner_id, id_counter++, wager, false);
     }
 
     public Hand(Hand split)
     {
-        this(id_counter++, split.owner, split.wager, true);
+        this(split.round_id, split.owner_id, id_counter++, split.wager, true);
+        this.cards.add(split.cards.remove(0));
         split.split = true;
     }
 
@@ -123,20 +127,13 @@ public class Hand
         return builder.toString();
     }
 
-    byte[] toByte()
+    byte[] cardsToBytes()
     {        
-        byte[] arr = new byte[cards.size() + 5];
-        
-        ByteBuffer buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(wager);
-        arr[0] = buffer.get(0);
-        arr[1] = buffer.get(1);
-        arr[2] = buffer.get(2);
-        arr[3] = buffer.get(3);
-        arr[4] = (byte) (split ? 1 : 0);
+        byte[] arr = new byte[cards.size()];
         
         for(int i = 0; i < cards.size(); i++)
         {
-            arr[i+5] = cards.get(i).value;
+            arr[i] = cards.get(i).value;
         }
 
         return arr;
