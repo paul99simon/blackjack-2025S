@@ -46,6 +46,23 @@ application {
     mainClass.set("Main")
 }
 
+val logDir = File(rootDir, "logs")
+
+val createLogDir by tasks.registering {
+    doLast {
+        if (!logDir.exists()) {
+            logDir.mkdirs()
+            println("Created log directory at: ${logDir.absolutePath}")
+        }
+    }
+}
+
+tasks.named("run") {
+    dependsOn(createLogDir)
+}
+
+
 tasks.named<JavaExec>("run") {
+    dependsOn(createLogDir)
     standardInput = System.`in`  // Pipe System.in to the app
 }

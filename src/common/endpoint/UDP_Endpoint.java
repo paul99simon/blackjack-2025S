@@ -1,6 +1,8 @@
 package common.endpoint;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.DatagramPacket;
@@ -8,6 +10,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Set;
 import java.util.TreeSet;
@@ -19,6 +23,8 @@ import common.Protocoll;
 
 public abstract class UDP_Endpoint implements Runnable
 { 
+
+    private final String logFilePath;
     public final InstanceId id;
     public final byte role;
 
@@ -35,6 +41,20 @@ public abstract class UDP_Endpoint implements Runnable
     public UDP_Endpoint(byte role)
     {
         this.role = role;
+
+        if(role == Protocoll.Header.Role.PLAYER)
+        {
+            this.logFilePath = System.getProperty("user.dir") + "/" +Context.Log.player_log;
+        }
+        else if(role == Protocoll.Header.Role.DEALER)
+        {
+            this.logFilePath = System.getProperty("user.dir") + "/" +Context.Log.dealer_log;
+        }
+        else
+        {
+            this.logFilePath = System.getProperty("user.dir") + "/" +Context.Log.counter_log;
+        }
+
         this.acknowledged_Messages = Collections.synchronizedSet(new TreeSet<>());
         this.received_messages = new FixedSizeQueue<>(Context.Network.NUMBER_OF_LAST_MESSAGES);
         initIpAndPort();
@@ -42,6 +62,8 @@ public abstract class UDP_Endpoint implements Runnable
 
         listenThread = new Thread(() -> this.listenNetwork());
         inputThread = new Thread(() -> this.listenSystemIn());
+        System.out.println("instance id is " + id + " of udp endpoint (" + addr.getHostAddress() +", " +  port + ") with role " + Protocoll.Header.Role.toString(role));
+        printHelp();
     }
 
     private void initIpAndPort()
@@ -53,7 +75,6 @@ public abstract class UDP_Endpoint implements Runnable
             addr = socket.getLocalAddress();
             port = socket.getLocalPort();
             socket.disconnect();
-            System.out.printf("udp endpoint is (%s %d)\n", addr.getHostAddress(), port);
         }
         catch(UnknownHostException e)
         {
@@ -75,12 +96,12 @@ public abstract class UDP_Endpoint implements Runnable
             {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
+                LocalDateTime timestamp = LocalDateTime.now();
                 InetAddress addr = packet.getAddress();
                 int port = packet.getPort();
 
                 Message message = new Message(packet);
-                //TODO: remove println
-                System.out.println("received from " + addr.getHostAddress() + ", " + port + " message:" + message);
+                log(timestamp, addr, port, message, true);
                 
 
                 MessageIdentifier messageIdentifier = message.getIdentifier(); 
@@ -96,9 +117,9 @@ public abstract class UDP_Endpoint implements Runnable
                 {
                     Message ackMessage = Message.ackMessage(message.sender_id, role, message);
                     DatagramPacket ackPacket = new DatagramPacket(ackMessage.getBytes(), ackMessage.message_length, addr, port);
-                    //TODO: remove println
-                    System.out.println("sending_ack to " + addr.getHostAddress() + ", " + port + " message:" + ackMessage);
                     socket.send(ackPacket);
+                    timestamp = LocalDateTime.now();
+                    log(timestamp, addr, port, ackMessage, false);
                     if(! received_messages.contains(messageIdentifier))
                     {
                         received_messages.add(messageIdentifier);
@@ -132,8 +153,8 @@ public abstract class UDP_Endpoint implements Runnable
                 }
             }
             socket.send(packet);
-            //TODO: remove println
-            System.out.println("sending to " + addr.getHostAddress() + ", " + port + " message:" + message);
+            LocalDateTime timeStamp = LocalDateTime.now();
+            log(timeStamp, addr, port, message, false);
             tries++;
             try
             {
@@ -170,6 +191,39 @@ public abstract class UDP_Endpoint implements Runnable
         {
             System.out.println(e.getMessage());
         }
+    }
+    
+    public final void log(LocalDateTime timestamp, InetAddress addr, int port, Message message, boolean received)
+    {
+        StringBuilder builder = new StringBuilder();
+        String formattedTimestamp = timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        builder.append(formattedTimestamp).append(Protocoll.SEPERATOR);
+        
+        if(received)
+        {
+            builder.append(addr.getHostAddress()).append(Protocoll.SEPERATOR);
+            builder.append(this.addr.getHostAddress()).append(Protocoll.SEPERATOR);
+            builder.append(port + "->" + this.port).append(Protocoll.SEPERATOR);
+        }
+        else
+        {
+            builder.append(addr.getHostAddress()).append(Protocoll.SEPERATOR);
+            builder.append(this.addr.getHostAddress()).append(Protocoll.SEPERATOR);
+            builder.append(port + "->" + this.port).append(Protocoll.SEPERATOR);
+        }
+        builder.append(message.toString()).append("\n");
+
+        File logFile = new File(logFilePath);
+
+        try(FileWriter writer = new FileWriter(logFile, true))
+        {
+            writer.write(builder.toString());
+        }
+        catch(IOException e)
+        {
+            System.out.println(e.getMessage());
+        }
+
     }
 
     public abstract void processMessage(InetAddress sender_addr, int sender_port, Message message);

@@ -1,9 +1,7 @@
 package dealer;
 
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 
 import common.Card;
 import common.Protocoll;
@@ -22,8 +20,9 @@ public class Hand
     public boolean active;
     public boolean actionPerformed;
     public boolean split;
+    public boolean surrenderd;
     
-    private Hand(int round_id, InstanceId owner_id, int hand_id, int wager, boolean split)
+    private Hand(int round_id, InstanceId owner_id, int hand_id, int wager, boolean split, boolean surrenderd)
     {
         this.round_id = round_id;
         this.hand_id = hand_id;
@@ -31,6 +30,7 @@ public class Hand
         this.cards = new LinkedList<Card>();
         this.wager = wager;
         this.split = split;
+        this.surrenderd = surrenderd;
         this.active = true;
         this.actionPerformed = false;
     }
@@ -38,17 +38,17 @@ public class Hand
 
     public Hand(int round_id, InstanceId owner_id)
     {
-        this(round_id, owner_id, id_counter++, 0, false);
+        this(round_id, owner_id, id_counter++, 0, false, false);
     }
 
     public Hand(int round_id, InstanceId owner_id, int wager)
     {
-        this(round_id, owner_id, id_counter++, wager, false);
+        this(round_id, owner_id, id_counter++, wager, false, false);
     }
 
     public Hand(Hand split)
     {
-        this(split.round_id, split.owner_id, id_counter++, split.wager, true);
+        this(split.round_id, split.owner_id, id_counter++, split.wager, true, false);
         this.cards.add(split.cards.remove(0));
         split.split = true;
     }
@@ -56,7 +56,7 @@ public class Hand
     public void add(Card card)
     {
         cards.add(card);
-        active = values().stream().filter(value -> value < 22).count() != 0;
+        active = value() < 22;
     }
 
     public int size()
@@ -64,50 +64,26 @@ public class Hand
         return cards.size();
     }
 
-    public Set<Integer> values()
+    public int value()
     {
 
-        Set<Integer> result = new HashSet<>();
-        List<Integer> values = new LinkedList<>(); 
+        int total = 0;
+        int aces = 0;
 
-        if(cards.isEmpty())
-        {
-            result.add(0);
-            return result;
-        }
-        else
-        {   if(cards.get(0).getValue() == 1)
-            {
-                values.add(1);
-                values.add(11);
+        for (Card card : cards) {
+            if (card.getValue() == 1) {
+                aces++;
             }
-            else
-            {
-                values.add(cards.get(0).getValue());
-            }
+            total += card.getValue() == 1 ? 11 : card.getValue();
         }
 
-        for(int i = 1; i < size() ; i++)
-        {
-            if(cards.get(i).getValue() == 1)
-            {
-                int size = values.size();
-                for(int j = 0; j < size; j++)
-                {
-                    values.add(values.get(j) + 11);
-                    values.set(j,values.get(j) + 1);
-                }
-            }
-            else
-            {
-                for(int j = 0; j < values.size(); j++)
-                {
-                    values.set(j, values.get(j) + cards.get(i).getValue());
-                }
-            }
+        // Adjust for soft aces
+        while (total > 21 && aces > 0) {
+            total -= 10;
+            aces--;
         }
-        result.addAll(values);
-        return result;
+
+        return total;
     }
 
     @Override
@@ -118,12 +94,8 @@ public class Hand
         {
             builder.append(cards.get(i)).append(Protocoll.SEPERATOR);
         }
+        builder.append(this.value());
 
-        for(Integer value : values())
-        {
-            builder.append(value).append(Protocoll.SEPERATOR);
-        }
-        builder.deleteCharAt(builder.length()-1);
         return builder.toString();
     }
 

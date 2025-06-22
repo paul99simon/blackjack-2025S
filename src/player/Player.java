@@ -1,6 +1,7 @@
 package player;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.util.List;
 
@@ -21,11 +22,13 @@ public class Player extends UDP_Endpoint
 
     public List<Card> hand;
     public int bankroll;
+    private BettingStrategy strategy;
 
-    public Player()
+    public Player(Class<? extends BettingStrategy> strategy) throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException
     {
         super(Protocoll.Header.Role.PLAYER);
         this.bankroll = Context.Game.START_BANKROLL;
+        this.strategy = strategy.getDeclaredConstructor(Player.class).newInstance(this);
     }
 
     @Override
@@ -38,19 +41,22 @@ public class Player extends UDP_Endpoint
                 switch (message.sender_role)
                 {
                     case Protocoll.Header.Role.COUNTER:
-                        counter = new Triplet<InstanceId, InetAddress,Integer>(message.sender_id, addr, port);
+                        counter = new Triplet<InstanceId, InetAddress,Integer>(message.sender_id, sender_addr, sender_port);
                         break;
                     case Protocoll.Header.Role.DEALER:
-                        dealer = new Triplet<InstanceId, InetAddress, Integer>(message.sender_id, addr, port);
+                        dealer = new Triplet<InstanceId, InetAddress, Integer>(message.sender_id, sender_addr, sender_port);
                         break;
                     default:
                         break;
                 }
                 break;
+            
             case Protocoll.Header.Type.FIN:
                 break;
+
             case Protocoll.Header.Type.BET:
                 int wager = getBestWager();
+                System.out.println("wager is " + wager);
                 Message betMessage = Message.betMessage(id, role, wager);
                 Thread send = new Thread( () -> 
                 {
@@ -64,10 +70,66 @@ public class Player extends UDP_Endpoint
                     }
                 });
                 send.start();
+                bankroll = bankroll - wager;
                 break;
-            case Protocoll.Header.Type.CARDS:
 
+            case Protocoll.Header.Type.CARDS:
+                if(message.sender_role != Protocoll.Header.Role.DEALER) break;
+                hand = message.getCards();
+                System.out.println(hand);
                 break;
+            
+            case Protocoll.Header.Type.ACTION_REQUEST:
+                if(message.sender_role != Protocoll.Header.Role.DEALER) break;
+                List<Card> cards = message.getCards();
+                System.out.println(cards);
+                Message actionRequest = Message.actionRequest(id, role, cards);
+                Thread actionRequestThread = new Thread( () -> 
+                {
+                    try
+                    {
+                        send(counter.getValue1(), counter.getValue2(), actionRequest);
+                    }
+                    catch(IOException e)
+                    {
+                        System.out.println(e.getMessage());
+                    }
+                });
+                actionRequestThread.start();
+                break;
+
+            case Protocoll.Header.Type.ACTION:
+                if(message.sender_role != Protocoll.Header.Role.COUNTER) break;
+                Message actionMessage = Message.actionMessage(id, role, message.getAction());
+                System.out.println("action is "+ Context.Game.Actions.toString(message.getAction()));
+                Thread actionThread = new Thread( () -> 
+                {
+                    try
+                    {
+                        send(dealer.getValue1(), dealer.getValue2(), actionMessage);
+                    }
+                    catch(IOException e)
+                    {
+                        System.out.println(e.getMessage());
+                    }
+                }); 
+                actionThread.start();
+                break;
+
+            case Protocoll.Header.Type.WINNINGS:
+                if(message.sender_role != Protocoll.Header.Role.DEALER) break;
+                int winnings = message.getInt();
+                bankroll = bankroll + winnings;
+                if(winnings == 0)
+                {
+                    System.out.println("you lost, total bankroll = " + bankroll);;
+                }
+                else
+                {
+                    System.out.println("you won " + winnings + ", total bankroll = " + bankroll);
+                }
+                break;
+
             default:
                 break;
         }
@@ -117,7 +179,8 @@ public class Player extends UDP_Endpoint
     {
         StringBuilder builder = new StringBuilder();
         builder.append("usage:\n");
-        builder.append("    register");
+        builder.append("    register <dealer_ip> <dealer_port>      #connect to dealer\n");
+        builder.append("    register <counter_ip> <coutner_port>    #connect to counter\n");
         System.out.println(builder.toString());
     } 
 
@@ -128,7 +191,7 @@ public class Player extends UDP_Endpoint
 
     public int getBestWager()
     {
-        return 1;        
+        return strategy.getWager();      
     }
 
 }

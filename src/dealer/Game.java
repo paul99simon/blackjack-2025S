@@ -2,7 +2,9 @@ package dealer;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -45,6 +47,7 @@ public class Game
         this.round_id = 0;
         this.currentPhase = WAITING_PHASE;
         this.active_hands = new ConcurrentLinkedDeque<>();
+        this.finished_hands = Collections.synchronizedSet(new HashSet<>());
         this.draw_stack = new Stack<>();
         this.disc_stack = new Stack<>();
         this.dealer_hand = new Hand(this.round_id, dealer.id);

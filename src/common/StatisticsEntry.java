@@ -42,7 +42,7 @@ public record StatisticsEntry(int round_id, byte role, InstanceId player_id, int
 
     public byte[] toByte()
     {
-        byte[] arr = new byte[27 + hand.size()];
+        byte[] arr = new byte[32 + hand.size()];
 
         ByteBuffer buffer = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(round_id);
         arr[0] = buffer.get(0);

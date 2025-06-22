@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Stack;
 
 import common.endpoint.InstanceId;
-import dealer.Hand;
 
 public class Message {
     
@@ -93,14 +92,14 @@ public class Message {
         return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.UPCARD, payload);
     }
 
-    public static Message actionRequest(InstanceId sender_id, byte sender_type, Hand hand)
+    public static Message actionRequest(InstanceId sender_id, byte sender_type, List<Card> hand)
     {
-        byte[] payload = new byte[hand.cards.size()];
+        byte[] payload = new byte[hand.size()];
         for(int i = 0; i < payload.length; i++)
         {
-            payload[i] = hand.cards.get(i).value;
+            payload[i] = hand.get(i).value;
         }
-        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.ACTION, payload);
+        return new Message(sender_id, sender_type, id_counter++, Protocoll.Header.Type.ACTION_REQUEST, payload);
     }
 
     public static Message actionMessage(InstanceId sender_id, byte sender_type, byte action)
@@ -128,6 +127,24 @@ public class Message {
         return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.DECKCOUNT, payload);
     }
 
+    public static Message winnigsMessage(InstanceId sender_id, int winnings)
+    {
+        byte[] payload = ByteBuffer.allocate(4).order(Protocoll.BYTE_ORDER).putInt(winnings).array();
+        return new Message(sender_id, Protocoll.Header.Role.DEALER, id_counter++, Protocoll.Header.Type.WINNINGS, payload);
+    }
+
+    public static Message statisticsMessage(InstanceId sender_id, int sender_role, StatisticsEntry entry)
+    {
+        byte[] payload = entry.toByte();
+        return new Message(sender_id, sender_role, id_counter++, Protocoll.Header.Type.STATISTICS, payload);
+    }
+
+    public StatisticsEntry getEntry()
+    {
+        if(message_type != Protocoll.Header.Type.STATISTICS) throw new IllegalStateException("message is not type STATISTICS");
+        return StatisticsEntry.fromByte(payload);
+    }
+
     public byte getAction()
     {
         if(message_type != Protocoll.Header.Type.ACTION) throw new IllegalStateException("message is not of type ACTION");
@@ -136,7 +153,7 @@ public class Message {
 
     public int getInt()
     {
-        if(message_type != Protocoll.Header.Type.BET || message_type != Protocoll.Header.Type.DECKCOUNT || message_type != Protocoll.Header.Type.WINNINGS)
+        if(! (message_type == Protocoll.Header.Type.BET || message_type == Protocoll.Header.Type.DECKCOUNT || message_type == Protocoll.Header.Type.WINNINGS))
         {
             throw new IllegalStateException("message is not of type BET or DECKCOUNT or WINNIGS");
         } 
@@ -151,7 +168,10 @@ public class Message {
 
     public List<Card> getCards()
     {
-        if(message_type != Protocoll.Header.Type.CARDS) throw new IllegalStateException("message is not of type CARDS");
+        if(! (message_type == Protocoll.Header.Type.CARDS || message_type == Protocoll.Header.Type.ACTION_REQUEST || message_type == Protocoll.Header.Type.SHUFFLED))
+        {
+            throw new IllegalStateException("message is not of type CARDS");
+        }
         List<Card> cards = new LinkedList<>();
 
         for(int i = 0; i < payload.length; i++)

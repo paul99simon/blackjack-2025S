@@ -3,6 +3,7 @@ bin
 *.class
 
 # Log file
+logs
 *.log
 
 # Package Files #
@@ -25,6 +26,9 @@ bin
 
 #vscode
 .vscode
+
+#statistics
+*.csv
 
 #gradle
 build

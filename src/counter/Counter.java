@@ -1,5 +1,7 @@
 package counter;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -9,12 +11,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.stream.Collectors;
 
 import org.javatuples.Pair;
 
 import common.Card;
 import common.Context;
 import common.endpoint.InstanceId;
+import common.endpoint.MaxRetriesExceededException;
 import common.endpoint.UDP_Endpoint;
 import common.Message;
 import common.MessageIdentifier;
@@ -97,6 +101,7 @@ public class Counter extends UDP_Endpoint
             case Protocoll.Header.Type.UPCARD:
                 if(message.sender_role != Protocoll.Header.Role.DEALER) break;
                 upcard = message.getCard();
+                card_map.put(upcard.getValue(), card_map.get(upcard.getValue()) - 1);
                 break;
 
             case Protocoll.Header.Type.CARDS:
@@ -110,20 +115,50 @@ public class Counter extends UDP_Endpoint
                 }
                 break;
 
-            case Protocoll.Header.Type.ACTION:
+            case Protocoll.Header.Type.ACTION_REQUEST:
                 if(message.sender_role != Protocoll.Header.Role.PLAYER) break;
                 byte bestAction = bestAction(upcard, message.getCards());
                 Message actionMessage = Message.actionMessage(id, Protocoll.Header.Role.COUNTER, bestAction);
-                try
+                Thread actionThread = new Thread( () -> 
                 {
-                    send(sender_addr, sender_port, actionMessage);
+                    try
+                    {
+                        send(sender_addr, sender_port, actionMessage);
+                    }
+                    catch(IOException e)
+                    {
+                        System.out.println(e.getMessage());    
+                    }
+                });
+                actionThread.start();
+                break;
+            
+            case Protocoll.Header.Type.STATISTICS:
+                if(message.sender_role == Protocoll.Header.Role.DEALER)
+                {
+                    statistics.add(message.getEntry());
                 }
-                catch(IOException e)
+                else if(message.sender_role == Protocoll.Header.Role.PLAYER)
                 {
-                    System.out.println(e.getMessage());    
+                    List<StatisticsEntry> playerEntries = statistics.stream().filter(e -> e.player_id().equals(message.sender_id)).collect(Collectors.toList());
+                    Thread statisticsTread = new Thread( () ->
+                    {
+                        for(StatisticsEntry entry : playerEntries)
+                        {
+                            Message statisticsMessage = Message.statisticsMessage(id, role, entry);
+                            try
+                            {
+                                send(sender_addr, sender_port, statisticsMessage);
+                            }
+                            catch(IOException | MaxRetriesExceededException e)
+                            {
+                                System.out.println(e.getMessage());
+                            }
+                        }
+                    });
+                    statisticsTread.start();
                 }
                 break;
-
             default:
                 break;
         }
@@ -155,7 +190,10 @@ public class Counter extends UDP_Endpoint
                         acknowledged_Messages.remove(messageIdentifier);
                     }
                 }
-
+            }
+            else if(input.equals("save"))
+            {
+                writeToCSV();
             }
             else
             {
@@ -169,33 +207,35 @@ public class Counter extends UDP_Endpoint
     }
 
     @Override
-    protected void printHelp() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'printHelp'");
-    }
+    protected void printHelp()
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.append("usage:\n");
+        builder.append("    register <dealer_ip> <dealer_port>      #connect to dealer\n");
+        builder.append("    save                                    #save current game history to a csv file\n");
+        System.out.println(builder.toString());
+    } 
 
     private byte bestAction(Card upCard, List<Card> hand)
     {   
         DecisionMaxHeap heap = new DecisionMaxHeap();
- 
-        //check if splittable and split according to basic strategy chart
-        if(hand.size() == 2)
-        {   
-            heap.insert(new Decision(splitEV(hand.get(0), hand.get(1), upCard), Context.Game.Actions.SPLIT));
-        }
-
-        OutcomeDistribution od = gerDealersOD(upCard, card_map);
-
         List<Integer> values = new LinkedList<>();
         for(Card card : hand)
         {
             values.add(card.getValue());
         }
+        
+        OutcomeDistribution od = gerDealersOD(upCard, card_map);
+        
+        if(hand.size() == 2)
+        {   
+            heap.insert(new Decision(splitEV(hand.get(0), hand.get(1), upCard), Context.Game.Actions.SPLIT));
+            heap.insert(new Decision(doubleDownEV(values, isSoft(values), card_map, od), Context.Game.Actions.DOUBLE_DOWN));
+            heap.insert(new Decision(surrenderEV(), Context.Game.Actions.SURRENDER));
+        }
 
         heap.insert(new Decision(hitEV(values, isSoft(values), card_map, od), Context.Game.Actions.HIT));
-        heap.insert(new Decision(doubleDownEV(values, isSoft(values), card_map, od), Context.Game.Actions.DOUBLE_DOWN));
         heap.insert(new Decision(standEV(handTotal(values), isSoft(values), od), Context.Game.Actions.STAND));
-        heap.insert(new Decision(surrenderEV(), Context.Game.Actions.SURRENDER));
 
         return heap.peekMax().action();
     }
@@ -412,6 +452,40 @@ public class Counter extends UDP_Endpoint
         return - 0.5;
     }
 
+    private void writeToCSV()
+    {
+        String path = System.getProperty("user.dir") + "/" + Context.Log.game_staticstics;
+        String sep = Protocoll.SEPERATOR;
+        File statisticsFile = new File(path);
+
+        String[] header = {"round_id","role", "instance_id","hand_id", "win","blackjack","split","wager","winnings","deckcount","hand"};
+        try (FileWriter writer = new FileWriter(statisticsFile, false))
+        {
+            writer.write(String.join(sep,header) + "\n");
+
+            for (StatisticsEntry entry : statistics)
+            {
+                String[] strings = new String[11];
+                strings[0] = Integer.toString(entry.round_id());
+                strings[1] = Integer.toString(entry.role());
+                strings[2] = entry.player_id().toString();
+                strings[3] = Integer.toString(entry.hand_id());
+                strings[4] = entry.win() ? "1" : "0";
+                strings[5] = entry.blackJack() ? "1" : "0";
+                strings[6] = entry.split() ? "1" : "0";
+                strings[7] = Integer.toString(entry.wager());
+                strings[8] = Integer.toString(entry.winnings());
+                strings[9] = Integer.toString(entry.deckcount());
+                strings[10] = entry.hand().stream().map(String::valueOf).collect(Collectors.joining(";"));
+                writer.write(String.join(sep, strings) + "\n");
+            }
+        }
+        catch(IOException e)
+        {
+            System.out.println(e.getMessage());
+        }
+    }
+
     public static void main(String[] args)
     {
         Counter counter = new Counter();
@@ -486,5 +560,4 @@ public class Counter extends UDP_Endpoint
 
 
     }
-
 }

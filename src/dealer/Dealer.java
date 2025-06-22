@@ -67,6 +67,7 @@ public class Dealer extends UDP_Endpoint
                             }
                         });
                         break;
+
                     case Protocoll.Header.Role.PLAYER:
                         players.put(message.sender_id, new Pair<InetAddress, Integer>(sender_addr, sender_port));
                         synThread = new Thread(() ->
@@ -81,14 +82,17 @@ public class Dealer extends UDP_Endpoint
                             }
                         });
                         break;
+
                     default:
                         break;
                 }
                 synThread.start();
                 break;
+            
             case Protocoll.Header.Type.FIN:
                 if(message.message_type == Protocoll.Header.Role.DEALER) break;
                 break;
+            
             case Protocoll.Header.Type.BET:
                 if(message.sender_role != Protocoll.Header.Role.PLAYER) break;
                 if(game.currentPhase != Game.BETTING_PHASE) break;
@@ -103,6 +107,21 @@ public class Dealer extends UDP_Endpoint
                     }
                 }
                 break;
+            
+                case Protocoll.Header.Type.ACTION:
+                    if(message.sender_role != Protocoll.Header.Role.PLAYER) break;
+                    if(! message.sender_id.equals(game.currentHand.owner_id)) break;
+                    byte action = message.getAction();
+
+                    synchronized(game.lock)
+                    {
+                        game.currentHand.actionPerformed = true;
+                        gameThread.action = action;
+                        gameThread.ready = true;
+                        game.lock.notify();
+                    }
+                break;
+
             default:
                 break;
         }
@@ -131,7 +150,8 @@ public class Dealer extends UDP_Endpoint
     {
         StringBuilder builder = new StringBuilder();
         builder.append("usage:\n");
-        builder.append("    start");
+        builder.append("    start       #type start if the counter and all players are connected\n");
+        builder.append("    pause       #type pause if you want to connect more players, active round resumes until its finished\n");
         System.out.println(builder.toString());
     }
     
