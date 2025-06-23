@@ -126,7 +126,7 @@ public class GameThread extends Thread
             List<Card> cards = new LinkedList<>();
             cards.add(game.drawCard());
             cards.add(game.drawCard());
-            Message message = Message.cardsMessage(dealer.id, Protocoll.Header.Role.DEALER, cards);
+            Message message = Message.cardsMessage(dealer.id, dealer.role, cards);
             
             try
             {
@@ -176,9 +176,9 @@ public class GameThread extends Thread
             }
             while(game.currentHand.active)
             {
+                Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER, game.currentHand.cards);
                 try
                 {
-                    Message actionRequest = Message.actionRequest(dealer.id, Protocoll.Header.Role.DEALER, game.currentHand.cards);
                     dealer.send(addr, port, actionRequest);
 
                     while(!ready)
@@ -248,7 +248,7 @@ public class GameThread extends Thread
                     if(! game.currentHand.active)
                     {
                         game.finished_hands.add(game.currentHand);
-                        player_Message = Message.cardsMessage(dealer.id, Protocoll.Header.Role.DEALER, game.currentHand.cards);
+                        player_Message = Message.cardsMessage(dealer.id, dealer.role, game.currentHand.cards);
                         try
                         {
                             dealer.send(addr, port, player_Message);
@@ -298,7 +298,7 @@ public class GameThread extends Thread
                     Card card1 = game.drawCard();
                     Card card2 = game.drawCard();
 
-                    counter_Message = Message.cardsMessage(dealer.id,Protocoll.Header.Role.DEALER,List.of(card1, card2));
+                    counter_Message = Message.cardsMessage(dealer.id, dealer.role, List.of(card1, card2));
                     try
                     {
                         dealer.send(dealer.counter.getValue0(),dealer.counter.getValue1(), counter_Message);
@@ -307,8 +307,8 @@ public class GameThread extends Thread
                     {
                         System.out.println(e.getMessage());
                     } 
-                    game.currentHand.add(game.drawCard());
-                    split.add(game.drawCard());
+                    game.currentHand.add(card1);
+                    split.add(card2);
                 }
                 break;
             case Context.Game.Actions.SURRENDER:
@@ -360,83 +360,72 @@ public class GameThread extends Thread
         statisticsEntries.add(dealerEnry);
         game.disc_stack.addAll(game.dealer_hand.cards);
 
-
         for(Hand hand : game.finished_hands)
         {
             game.disc_stack.addAll(hand.cards);
             boolean win = true;
-            if(hand.value() > 21)
-            {
-                win = false;
-            }
-            if(hand.value() <= dealer_value && !dealer_bust)
-            {
-                win = false;
-            }
-            if(hand.surrenderd)
-            {
-                win =false;
-            }
-            boolean blackJack = hand.cards.size() == 2 && ! hand.split && hand.value() == 21;
 
+            if(hand.value() > 21) win = false;
+            if(hand.value() <= dealer_value && !dealer_bust) win = false;
+            if(hand.surrenderd) win =false;
+            
+            boolean blackJack = hand.cards.size() == 2 && ! hand.split && hand.value() == 21;
+            
             int winnings = 0;
 
-            if(win && blackJack)
+            if(win && blackJack) winnings = (int) (2.5 * hand.wager);
+            else if(win) winnings = 2 * hand.wager;
+            else if(hand.surrenderd) winnings = (int) (0.5 * hand.wager);
+            
+            InetAddress addr;
+            int port;
+            
+            synchronized(dealer.players)
             {
-                winnings = (int) (2.5 * hand.wager);
+                addr = dealer.players.get(hand.owner_id).getValue0();
+                port = dealer.players.get(hand.owner_id).getValue1();
             }
-            else if(win)
-            {
-                winnings = 2 * hand.wager;
-            }
-            else if(hand.surrenderd)
-            {
-                winnings = (int) (0.5 * hand.wager);
-            }
-
+            
+            Message winnigsMessage = Message.winnigsMessage(dealer.id, winnings);
             try
             {              
-                InetAddress addr;
-                int port;
-                Message winnigsMessage = Message.winnigsMessage(dealer.id, winnings);
-                synchronized(dealer.players)
-                {
-                    addr = dealer.players.get(hand.owner_id).getValue0();
-                    port = dealer.players.get(hand.owner_id).getValue1();
-                }
-
                 dealer.send(addr,port, winnigsMessage);
             }
             catch(IOException | MaxRetriesExceededException e)
             {
                 System.out.println(e.getMessage());
             }
+
             StatisticsEntry player_entry = new StatisticsEntry(game.round_id, Protocoll.Header.Role.PLAYER, hand.owner_id, hand.hand_id, win, blackJack, hand.split, hand.wager, winnings, game.deckCount, hand.cards );
             statisticsEntries.add(player_entry);
-
-            InetAddress addr;
-            int port;
 
             synchronized(dealer.counter)
             {
                 addr = dealer.counter.getValue0();
                 port = dealer.counter.getValue1();
             }
+        }
+            
+        InetAddress addr;
+        int port;
 
-            for(StatisticsEntry entry : statisticsEntries)
+        synchronized(dealer.counter)
+        {
+            addr = dealer.counter.getValue0();
+            port = dealer.counter.getValue1();
+        }        
+        
+        for(StatisticsEntry entry : statisticsEntries)
+        {
+            Message statisticMessage = Message.statisticsMessage(dealer.id, dealer.role, entry);                
+            try
             {
-                
-                Message statisticMessage = Message.statisticsMessage(dealer.id, dealer.role, entry);                
-                try
-                {
-                    dealer.send(addr, port, statisticMessage);
-                }
-                catch(IOException | MaxRetriesExceededException e)
-                {
-                    System.out.println(e.getMessage());
-                }
+                dealer.send(addr, port, statisticMessage);
             }
-
+            catch(IOException | MaxRetriesExceededException e)
+            {
+                System.out.println(e.getMessage());
+            }
         }
         game.finished_hands.clear();
     }

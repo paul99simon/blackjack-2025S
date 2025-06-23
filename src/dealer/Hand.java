@@ -56,7 +56,10 @@ public class Hand
     public void add(Card card)
     {
         cards.add(card);
-        active = value() < 22;
+        if(value() > 21)
+        {
+            active = false;
+        }
     }
 
     public int size()
