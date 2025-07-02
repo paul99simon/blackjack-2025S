@@ -4,6 +4,17 @@
 
 ### Sliding Window, TCP Tahoe, TCP Reno, TCP Vegas
 
+Das TCP-Protokoll spezifiziert ein Anzahl an Bytes, die ohne eine Empfangsbestätigung übertragen werden können.
+Diese Anzahl ist flexibel und wird deswegen auch Sliding Window genannt.
+Diese Technik hilft dabei die speicherfähigkeit des Mediums besser auszunutzen.
+Tahoe, Reno und Vegas sind Algorithmen, die die Größe des Sliding-Window bestimmen.
+Sie nutzen dabei unterschiedliche Heuristiken.
+TCP Tahoe vergrößert das Sliding-Window, bis es drei duppizierte Acks erhält.
+Dann setzt es die Größe 1 und beginnt das Febster linear zu vergrößern.
+Dies ist in der folgenden Grafik zu erkennen
+
+![TCP-Tahoe](img/TCP_Tahoe.png)
+
 ### Liste von Protokollen und das entsprechende ISO/OSI Layer
 
 | Protokoll  | ISO/OSI Schicht   |
@@ -14,12 +25,69 @@
 | ICMP       | Network-Layer     |
 | UDP        | Transport-Layer   |
 | TCP        | Transport-Layer   |
-| QUIC       | Transport-Layer   |
-| DHCP       | Transport-Layer   |
-| DNS        | Transport-Layer   |
-| BOOTP      | Application-Layer |
+| QUIC       | Application-Layer |
+| DHCP       | Application-Layer |
+| DNS        | Application-Layer |
 
 ## Aufgabe 2
+
+### a)
+
+Wie viele Hosts sich in meinem Klasse-C Netz befinden, kann mit dem Befehl
+
+```bash
+sudo nmap -sP 192.168.0.0/24 | grep "scan report" | wc -l
+```
+
+in Erfahrung gebracht werden. Mobile Endgeräte werden aber über Ping Scans nur bedingt gut erfasst und so kann es zu unterschiedlichen Ergebissen kommen.
+
+### b)
+
+Das Betriebssystem kann mit dem Nmap Befehl
+
+```bash
+sudo nmap -O scanme.nmap.org
+```
+
+In Erfahrung gebracht werden.
+
+### c)
+
+Wir können mit dem Befehl
+
+```bash
+whois nmap.org
+```
+
+herausfinden, wann die Website registriert wurde. (18.01.1999)
+
+### d)
+
+Um eine große Anzahl Adressen nach offenen TCP-Ports zu scannen können wir einen sogenannten SYN-Scan verwenden.
+Diesen führt nmap standartmäßig aus, wenn es mit root Rechten gestartet wird.
+Wir können die Option aber auch explizit angeben.
+Den Adressraum können wir durch CIDR-Notation spezifizieren.
+
+```bash
+sudo nmap -sS 192.168.0.0/24
+```
+
+### e)
+Der SYN-Scan schickt ein SYN-Paket an einen Port.
+Dieser Antwortet, wenn er offen ist, mit einem SYN/ACK-Paket.
+Ist er geschlossen wird mit einem RST-Paket geantwortet.
+Erhält man keine Antwort oder erhält man einen ICMP unreachable Fehler wird der Port als gefiltert markiert.
+
+Der SYN-Scan nutzt aus, dass TCP-Verbindungen im halboffenen Zustand verbleiben können, denn Nmap antwortet auf das erhaltenen SYN/ACK nicht mit einem ACK-Paket. Dies ermöglicht das schnelle Scannen von vielen Ports.
+
+### f)
+
+| Port      | Anwendung |
+|-----------|-----------|
+| 22/tcp    | ssh       |
+| 53/tcp    | DNS       |
+| 67-68/udp | DHCP      |
+| 80/tcp    | http      |
 
 ## Aufgabe 3
 
