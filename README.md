@@ -73,6 +73,7 @@ sudo nmap -sS 192.168.0.0/24
 ```
 
 ### e)
+
 Der SYN-Scan schickt ein SYN-Paket an einen Port.
 Dieser Antwortet, wenn er offen ist, mit einem SYN/ACK-Paket.
 Ist er geschlossen wird mit einem RST-Paket geantwortet.
@@ -393,3 +394,74 @@ Dynamic Host Configuration Protocol (ACK)
 ```
 
 ## Aufgabe 4
+
+### Analyse
+
+Sei $G = (V, E)$ ein ungerichteter gewichteter zusammenhängender Graph mit
+$$w : E \rightarrow \mathbb{R}^+, w(e) = \text{Gewicht von } e$$
+Der Algorithmus beginnt indem er die Distanzen zu seinen direkten Nachbarn in die Tabelle einträgt.
+Danach teilt jeder Knoten seine Routingtabelle mit den anderen Knoten im Netz.
+Dies führen wir $|V|$ mal aus, und aktualisieren entsprechend die Routingtabelle.
+Kann ein Router feststellen, dass ein neuer kürzerer Pfad existiert, aktualisiert er dies in der Routingtabelle.
+Für jeden Schleifendurchlauf $1 \leq i \leq |V|$ gilt, dass eine Routingtabelle für einen Knoten $v$ die aktuell kürzesten Pfade zu genau den Knoten enthält, welche maximal $i$ hops entfernt sind.
+
+Da die maximale Anzahl an Hops $|V| - 1$ beträgt folgt die Korrektheit des Algortihmus.
+Ein Router erstellet also $|V|$ Routingtabellen und aktualisieren für diese jedes mal eine ${|V| \times |V|}$ Matrix.
+Insgesamt benötigt jeder Router also $O(|V|^3)$ Zeit.
+
+Der Algorithmus hat keine ungewöhnliche Laufzeit für einen naiven kürzeste Wege Algorithmus.
+Jedoch ist ein Vorteil dieses Algorithmus, dass die Netzwerk Toplogie vorher nicht bekannt sein muss.
+Dies bedeutet auch, dass solange jeder Router den Algorithmus implementiert, das Netzwerk in seiner Topologie verändert werden kann.
+Außerdem kann das Routing periodisch verändert werden, indem man den Algorithmus erneut durchläuft.
+Dies ist insbesondere von Vorteil, wenn sich die Kantengewichte, also die gemessenen Werte einer Metrik, dynamisch verändern können (z.B. Round-Trip-Time).
+
+### a)
+
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 2     |       |       | | Zu x  | 7     |       |       |
+| Zu y  |       | 2     |       | | Zu y  |       |       |       | | Zu y  |       | 1     |       |
+| Zu z  |       |       | 7     | | Zu z  |       |       | 1     | | Zu z  |       |       |       |
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 2     |       | 8     | | Zu x  | 7     | 3     |       |
+| Zu y  |       | 2     | 8     | | Zu y  |       |       |       | | Zu y  | 9     | 1     |       |
+| Zu z  |       | 3     | 7     | | Zu z  | 9     |       | 1     | | Zu z  |       |       |       |
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 2     |       | 8     | | Zu x  | 7     | 3     |       |
+| Zu y  |       | 2     | 8     | | Zu y  |       |       |       | | Zu y  | 9     | 1     |       |
+| Zu z  |       | 3     | 7     | | Zu z  | 9     |       | 1     | | Zu z  |       |       |       |
+
+### b)
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 7     |       |       | | Zu x  | 7     |       |       |
+| Zu y  |       | 7     |       | | Zu y  |       |       |       | | Zu y  |       | 1     |       |
+| Zu z  |       |       | 7     | | Zu z  |       |       | 1     | | Zu z  |       |       |       |
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 7     |       | 8     | | Zu x  | 7     | 8     |       |
+| Zu y  |       | 7     | 8     | | Zu y  |       |       |       | | Zu y  | 14    | 1     |       |
+| Zu z  |       | 8     | 7     | | Zu z  | 14    |       | 1     | | Zu z  |       |       |       |
+
+| Von x | Via x | Via y | Via z | | Von y | Via x | Via y | Via z | | Von z | Via x | Via y | Via z |
+|-------|-------|-------|-------|-|-------|-------|-------|-------|-|-------|-------|-------|-------|
+| Zu x  |       |       |       | | Zu x  | 7     |       | 8     | | Zu x  | 7     | 8     |       |
+| Zu y  |       | 7     | 8     | | Zu y  |       |       |       | | Zu y  | 14    | 1     |       |
+| Zu z  |       | 8     | 7     | | Zu z  | 14    |       | 1     | | Zu z  |       |       |       |
+
+Der konstengünstigste Pfad von $z$ nach $x$ ändert sich nicht.
+
+### c)
+
+Mit dem oben beschriebene Algorithmus bemerken sie nicht, dass Router D ausfällt.
+Dies könnten sie nur bemerken, wenn sie die Adresse des Routers cachen würden, und ein ausbleibendes Paket bemerkt würde.
+Aber selbst wenn sie es bemerken würden wären sie mit der gegebenen Nezwerktopologie nicht in der Lage den Ausfall zu ersetzen.
+Wären sie dazu in der Lage würde der Algorithmus einen kürzesten Weg finden und die Konnektivität wäre sichergestellt.
+Es macht also keinen Unterschied, ob die anderen Router den Ausfall bemerken oder nicht.
