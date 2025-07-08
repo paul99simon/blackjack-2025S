@@ -39,7 +39,7 @@ Wie viele Hosts sich in meinem Klasse-C Netz befinden, kann mit dem Befehl
 sudo nmap -sP 192.168.0.0/24 | grep "scan report" | wc -l
 ```
 
-in Erfahrung gebracht werden. Mobile Endgeräte werden aber über Ping Scans nur bedingt gut erfasst und so kann es zu unterschiedlichen Ergebissen kommen.
+in Erfahrung gebracht werden. Mobile Endgeräte werden aber über Ping Scans nur bedingt gut erfasst und so kann es zu unterschiedlichen Ergebnissen kommen.
 
 ### b)
 
@@ -63,8 +63,8 @@ herausfinden, wann die Website registriert wurde. (18.01.1999)
 
 ### d)
 
-Um eine große Anzahl Adressen nach offenen TCP-Ports zu scannen können wir einen sogenannten SYN-Scan verwenden.
-Diesen führt nmap standartmäßig aus, wenn es mit root Rechten gestartet wird.
+Um eine große Anzahl Adressen nach offenen TCP-Ports zu scannen, können wir einen sogenannten SYN-Scan verwenden.
+Diesen führt nmap standardmäßig aus, wenn es mit Root Rechten gestartet wird.
 Wir können die Option aber auch explizit angeben.
 Den Adressraum können wir durch CIDR-Notation spezifizieren.
 
@@ -76,7 +76,7 @@ sudo nmap -sS 192.168.0.0/24
 
 Der SYN-Scan schickt ein SYN-Paket an einen Port.
 Dieser Antwortet, wenn er offen ist, mit einem SYN/ACK-Paket.
-Ist er geschlossen wird mit einem RST-Paket geantwortet.
+Ist er geschlossen, wird mit einem RST-Paket geantwortet.
 Erhält man keine Antwort oder erhält man einen ICMP unreachable Fehler wird der Port als gefiltert markiert.
 
 Der SYN-Scan nutzt aus, dass TCP-Verbindungen im halboffenen Zustand verbleiben können, denn Nmap antwortet auf das erhaltenen SYN/ACK nicht mit einem ACK-Paket. Dies ermöglicht das schnelle Scannen von vielen Ports.
@@ -108,7 +108,7 @@ Dies führt zu folgender Aufzeichnung und zeigt exemplarisch den Ablauf eines DH
 
 Es wird dem DHCP Server mitgeteilt, dass er die IP-Adresse des Hosts wieder vergeben kann.
 Dies ist eine optionale Operation, da ein Host nicht zwangsläufig seine IP-Adresse freigeben muss.
-Im udp Header können wir sehen, dass sowohl die Ip des Hosts als auch die Ip des Servers bekannt ist.
+Im UDP Header können wir sehen, dass sowohl die IP des Hosts als auch die IP des Servers bekannt ist.
 
 ```text
 Frame 1: 342 bytes on wire (2736 bits), 342 bytes captured (2736 bits) on interface enp4s0, id 0
@@ -211,7 +211,7 @@ Erhält der DHCP-Server eine `Discover` Nachricht erstellt er eine `Offer` Nachr
 Hier bietet er dem Client eine gültige IP an.
 Diese ist auch schon als Ziel-Adresse im udp Header zu finden.
 Dass die Nachricht überhaupt ankommt, liegt an der MAC-Adresse die im Ethernet Header spezifiziert ist.
-Es werden dem DHCP-Client auch weitere diverse Infomrationen mitgeteilt, wie zum Beispiel die IP eines DNS-Servers.
+Es werden dem DHCP-Client auch weitere diverse Informationen mitgeteilt, wie zum Beispiel die IP eines DNS-Servers.
 
 ```text
 Frame 4: 342 bytes on wire (2736 bits), 342 bytes captured (2736 bits) on interface enp4s0, id 0
